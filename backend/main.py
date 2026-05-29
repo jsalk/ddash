@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+from starlette.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # Import module collectors (registration happens on import)
@@ -73,4 +74,9 @@ async def list_layouts():
 # ── Static files (after API routes) ────────────────────────────────────────
 _static = Path(__file__).resolve().parent.parent / "static"
 if _static.exists():
-    app.mount("/", StaticFiles(directory=str(_static), html=True), name="static")
+    app.mount("/static", StaticFiles(directory=str(_static)), name="static")
+
+# Serve index.html at root
+@app.get("/")
+async def root():
+    return FileResponse(str(_static / "index.html"), media_type="text/html")
