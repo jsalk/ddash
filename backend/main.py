@@ -1,571 +1,459 @@
-"""ddash — live system dashboard backend."""
+"""
+ddash v2.0 — Backend API
 
+Modular architecture: each monitoring module is a self-contained unit
+with its own data collector. The API registry exposes them all.
+
+Run: uvicorn backend.main:app --host 0.0.0.0 --port 9000
+"""
 import asyncio
 import json
-import subprocess
 import time
-from datetime import datetime, timezone
+import subprocess
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import psutil
 import requests
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-app = FastAPI(title="ddash")
+app = FastAPI(title="ddash", version="2.0.0")
 
-# ── config ────────────────────────────────────────────────────────────────────
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
-if _CONFIG_PATH.exists():
-    import json as _json
-    _cfg = _json.loads(_CONFIG_PATH.read_text())
-else:
-    _cfg = {}
+# ── Config ──────────────────────────────────────────────────────────────────
+_cfg_path = Path(__file__).resolve().parent.parent / "config.json"
+_cfg = json.loads(_cfg_path.read_text()) if _cfg_path.exists() else {}
 
-ABS_URL = _cfg.get("ABS_URL", "http://192.168.0.92:13378")
-ABS_TOKEN = _cfg.get("ABS_TOKEN", "")
-ABS_FRESHNESS_SEC = _cfg.get("ABS_FRESHNESS_SEC", 60)
-ABS_POLL_SEC = _cfg.get("ABS_POLL_SEC", 5)
-
-WEATHER_CITY = _cfg.get("WEATHER_CITY", "Chicago")
-_geo_coords = None  # (lat, lon) from browser geolocation
-WEATHER_CACHE_SEC = _cfg.get("WEATHER_CACHE_SEC", 600)  # 10 min
-
-_static = Path(__file__).resolve().parent.parent / "static"
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-_prev_net = None
-_prev_net_time = None
+# ── Module Registry ─────────────────────────────────────────────────────────
+# Each module: { id, title, icon, category, collect() -> dict }
+MODULES: dict[str, dict] = {}
 
 
-def _get_cpu_times():
-    """Return (user, system, idle) as percentages."""
-    c = psutil.cpu_times_percent(interval=0)
-    return c.user + c.nice, c.system + c.iowait, c.idle
+def register(id: str, title: str, icon: str, category: str):
+    """Decorator to register a monitoring module."""
+    def decorator(func):
+        MODULES[id] = {
+            "id": id,
+            "title": title,
+            "icon": icon,
+            "category": category,
+            "collect": func,
+        }
+        return func
+    return decorator
 
 
-def _get_network_rates():
-    global _prev_net, _prev_net_time
-    counters = psutil.net_io_counters()
-    now = time.monotonic()
-    rx, tx = counters.bytes_recv, counters.bytes_sent
-    if _prev_net is None or _prev_net_time is None:
-        _prev_net = (rx, tx)
-        _prev_net_time = now
-        return 0.0, 0.0
-    dt = now - _prev_net_time
-    if dt < 0.1:
-        dt = 0.1
-    rx_rate = (rx - _prev_net[0]) / dt
-    tx_rate = (tx - _prev_net[1]) / dt
-    _prev_net = (rx, tx)
-    _prev_net_time = now
-    return rx_rate, tx_rate
+# ── Data Collectors ─────────────────────────────────────────────────────────
+
+@register("cpu", "CPU", "fa-microchip", "system")
+def collect_cpu() -> dict:
+    p = psutil.cpu_percent(interval=0.1, percpu=False)
+    times = psutil.cpu_times_percent(interval=0)
+    freq = psutil.cpu_freq()
+    load = psutil.getloadavg()
+    return {
+        "percent": p,
+        "user": times.user,
+        "sys": times.system,
+        "cores": psutil.cpu_count(logical=True),
+        "freq": round(freq.current / 1000, 1) if freq else 0,
+        "load": [round(l, 2) for l in load],
+    }
 
 
-def _fmt_bytes(b):
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(b) < 1024:
-            return f"{b:.1f} {unit}"
-        b /= 1024
-    return f"{b:.1f} PB"
-
-
-def _fmt_rate(bps):
-    return _fmt_bytes(bps) + "/s"
-
-
-def _get_temps():
-    """Read temps via sensors command."""
+@register("gpu", "GPU", "fa-display", "system")
+def collect_gpu() -> dict:
     try:
-        r = subprocess.run(["sensors", "-j"], capture_output=True, text=True, timeout=3)
-        if r.returncode != 0:
-            return _get_temps_text()
-        data = json.loads(r.stdout)
-        temps = {}
-        for chip, features in data.items():
-            for feat, vals in features.items():
-                if isinstance(vals, dict) and "temp1_input" in vals:
-                    label = f"{chip}/{feat}"
-                    temps[label] = round(vals["temp1_input"], 1)
-        return temps
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,utilization.gpu,temperature.gpu,power.draw,memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            parts = [x.strip() for x in r.stdout.strip().split(",")]
+            if len(parts) >= 6:
+                return {
+                    "name": parts[0],
+                    "utilization": int(parts[1]),
+                    "temp": int(parts[2]),
+                    "power": float(parts[3]),
+                    "vram_used": int(parts[4]),
+                    "vram_total": int(parts[5]),
+                }
     except Exception:
-        return _get_temps_text()
+        pass
+    return {"name": "N/A", "utilization": 0, "temp": 0, "power": 0, "vram_used": 0, "vram_total": 0}
 
 
-def _get_temps_text():
-    """Fallback: parse sensors text output."""
+@register("memory", "Memory", "fa-memory", "system")
+def collect_memory() -> dict:
+    m = psutil.virtual_memory()
+    s = psutil.swap_memory()
+    return {
+        "ram": {"percent": m.percent, "used": m.used, "total": m.total, "available": m.available},
+        "swap": {"percent": s.percent, "used": s.used, "total": s.total},
+    }
+
+
+@register("network", "Network", "fa-network-wired", "system")
+def collect_network() -> dict:
+    n1 = psutil.net_io_counters()
+    time.sleep(0.1)
+    n2 = psutil.net_io_counters()
+    dt = 0.1
+    return {
+        "rx_rate": int((n2.bytes_recv - n1.bytes_recv) / dt),
+        "tx_rate": int((n2.bytes_sent - n1.bytes_sent) / dt),
+        "rx_total": n2.bytes_recv,
+        "tx_total": n2.bytes_sent,
+    }
+
+
+@register("temps", "Temps", "fa-thermometer-half", "system")
+def collect_temps() -> dict:
     try:
-        r = subprocess.run(["sensors"], capture_output=True, text=True, timeout=3)
-        temps = {}
-        for line in r.stdout.splitlines():
-            if "temp1:" in line or "Tctl:" in line or "Tccd" in line:
-                parts = line.split()
-                for i, p in enumerate(parts):
-                    if p.startswith("+") and "°C" in p:
-                        try:
-                            val = float(p.replace("°C", "").replace("+", ""))
-                            key = parts[0].rstrip(":")
-                            temps[key] = val
-                        except ValueError:
-                            pass
-        return temps
+        temps = psutil.sensors_temperatures()
+        return {k: v[0].current for k, v in temps.items() if v}
     except Exception:
         return {}
 
 
-def _get_gpu():
-    """Parse nvidia-smi for GPU stats."""
+@register("nowplaying", "Now Playing", "fa-play", "media")
+def collect_nowplaying() -> dict | None:
+    # Check MPRIS
     try:
         r = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=name,temperature.gpu,utilization.gpu,utilization.memory,"
-                "memory.used,memory.total,power.draw,power.limit,fan.speed",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=3,
+            ["playerctl", "metadata", "--format", "{{ playerName }}|{{ title }}|{{ artist }}|{{ position }}|{{ mpris:length }}"],
+            capture_output=True, text=True, timeout=1,
         )
-        if r.returncode != 0:
-            return None
-        parts = [p.strip() for p in r.stdout.strip().split(",")]
-        if len(parts) < 9:
-            return None
-        return {
-            "name": parts[0],
-            "temp": _safe_int(parts[1]),
-            "gpu_util": _safe_int(parts[2]),
-            "mem_util": _safe_int(parts[3]),
-            "mem_used": _safe_int(parts[4]),
-            "mem_total": _safe_int(parts[5]),
-            "power_draw": _safe_float(parts[6]),
-            "power_limit": _safe_float(parts[7]),
-            "fan_speed": _safe_float(parts[8]),
-        }
+        if r.returncode == 0 and r.stdout.strip():
+            parts = r.stdout.strip().split("|")
+            if len(parts) >= 5:
+                pos = int(parts[3]) / 1e6 if parts[3].isdigit() else 0
+                dur = int(parts[4]) / 1e6 if parts[4].isdigit() else 0
+                status_r = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=1)
+                status = status_r.stdout.strip() if status_r.returncode == 0 else "Unknown"
+                return {
+                    "source": parts[0],
+                    "title": parts[1],
+                    "artist": parts[2] if parts[2] else "",
+                    "position": pos,
+                    "duration": dur,
+                    "status": status,
+                }
     except Exception:
-        return None
+        pass
 
-
-def _safe_int(s):
-    try:
-        return int(s.strip())
-    except (ValueError, TypeError):
-        return 0
-
-
-def _safe_float(s):
-    try:
-        return float(s.strip())
-    except (ValueError, TypeError):
-        return 0.0
-
-
-# ── MPRIS / Audiobookshelf ──────────────────────────────────────────────────
-
-_abs_cache = None
-_abs_last_poll = 0.0
-
-
-def _get_mpris():
-    """Get media state from playerctl."""
-    try:
-        r = subprocess.run(
-            [
-                "playerctl", "metadata", "--format",
-                "{{status}}\t{{title}}\t{{artist}}\t{{position}}\t{{mpris:length}}\t{{xesam:url}}\t{{playerName}}",
-            ],
-            capture_output=True, text=True, timeout=2,
-        )
-        if r.returncode != 0 or not r.stdout.strip():
-            return None
-        parts = r.stdout.strip().split("\t")
-        if len(parts) < 7:
-            return None
-        status, title, artist, position, length, url, player = parts
-        if status not in ("Playing", "Paused"):
-            return None
-        pos = int(position) / 1_000_000 if position.lstrip("-").isdigit() else 0.0
-        dur = int(length) / 1_000_000 if length.lstrip("-").isdigit() else 0.0
-        return {
-            "status": status,
-            "title": title or "Unknown",
-            "artist": artist or "",
-            "pos": pos,
-            "dur": dur,
-            "source": _detect_source(url, player),
-        }
-    except Exception:
-        return None
-
-
-def _detect_source(url, player):
-    u = (url or "").lower()
-    if "music.youtube.com" in u:
-        return "YT Music"
-    if "youtube.com" in u or "youtu.be" in u:
-        return "YouTube"
-    if "spotify.com" in u:
-        return "Spotify"
-    if "soundcloud.com" in u:
-        return "SoundCloud"
-    if "bandcamp.com" in u:
-        return "Bandcamp"
-    return player.capitalize() if player else "Unknown"
-
-
-def _get_abs():
-    global _abs_cache, _abs_last_poll
-    now = time.time()
-    if now - _abs_last_poll < ABS_POLL_SEC:
-        return _abs_cache
-    _abs_last_poll = now
-    try:
-        resp = requests.get(
-            f"{ABS_URL}/api/me/listening-sessions",
-            headers={"Authorization": f"Bearer {ABS_TOKEN}"},
-            params={"itemsPerPage": 1},
-            timeout=3,
-        )
-        if resp.status_code != 200:
-            _abs_cache = None
-            return None
-        sessions = resp.json().get("sessions", [])
-        if not sessions:
-            _abs_cache = None
-            return None
-        s = sessions[0]
-        age = (now * 1000 - s.get("updatedAt", 0)) / 1000
-        if age > ABS_FRESHNESS_SEC:
-            _abs_cache = None
-            return None
-        _abs_cache = {
-            "status": "Playing",
-            "title": s.get("displayTitle", "Unknown"),
-            "artist": s.get("displayAuthor", ""),
-            "pos": float(s.get("currentTime", 0)),
-            "dur": float(s.get("duration", 0)),
-            "source": "Audiobookshelf",
-        }
-        return _abs_cache
-    except Exception:
-        _abs_cache = None
-        return None
-
-
-def _get_media():
-    return _get_mpris() or _get_abs()
-
-
-# ── Docker ────────────────────────────────────────────────────────────────────
-
-def _get_docker():
-    """Get Docker container statuses."""
-    try:
-        r = subprocess.run(
-            ["docker", "ps", "-a", "--format",
-             '{"name":"{{.Names}}","status":"{{.Status}}","image":"{{.Image}}","ports":"{{.Ports}}","state":"{{.State}}"}'],
-            capture_output=True, text=True, timeout=5,
-        )
-        if r.returncode != 0:
-            return []
-        containers = []
-        for line in r.stdout.strip().splitlines():
-            if line:
-                containers.append(json.loads(line))
-        return containers
-    except Exception:
-        return []
-
-
-# ── Weather ───────────────────────────────────────────────────────────────────
-
-_weather_cache = None
-_weather_last_fetch = 0.0
-
-
-def _get_weather():
-    global _weather_cache, _weather_last_fetch
-    now = time.time()
-    if _weather_cache and (now - _weather_last_fetch) < WEATHER_CACHE_SEC:
-        return _weather_cache
-    try:
-        location = f"{_geo_coords[0]},{_geo_coords[1]}" if _geo_coords else WEATHER_CITY
-        r = requests.get(
-            f"https://wttr.in/{location}?format=j1",
-            timeout=5,
-        )
-        if r.status_code != 200:
-            return _weather_cache
-        d = r.json()
-        c = d["current_condition"][0]
-        _weather_cache = {
-            "temp_f": c["temp_F"],
-            "feels_like_f": c["FeelsLikeF"],
-            "description": c["weatherDesc"][0]["value"],
-            "humidity": c["humidity"],
-            "wind_mph": c["windspeedMiles"],
-            "wind_dir": c["winddir16Point"],
-            "visibility_miles": c["visibility"],
-            "uv_index": c.get("uvIndex", "?"),
-        }
-        _weather_last_fetch = now
-        return _weather_cache
-    except Exception:
-        return _weather_cache
-
-
-# ── Disk ──────────────────────────────────────────────────────────────────────
-
-def _get_disks():
-    disks = []
-    for part in psutil.disk_partitions():
+    # Check Audiobookshelf
+    abs_url = _cfg.get("ABS_URL", "http://192.168.0.92:13378")
+    abs_token = _cfg.get("ABS_TOKEN", "")
+    if abs_token:
         try:
-            u = psutil.disk_usage(part.mountpoint)
+            r = requests.get(
+                f"{abs_url}/api/me/listening-sessions?itemsPerPage=1",
+                headers={"Authorization": f"Bearer {abs_token}"},
+                timeout=3,
+            )
+            if r.ok:
+                sessions = r.json().get("sessions", [])
+                if sessions:
+                    s = sessions[0]
+                    return {
+                        "source": "Audiobookshelf",
+                        "title": s.get("libraryItem", {}).get("media", {}).get("metadata", {}).get("title", "Unknown"),
+                        "artist": s.get("libraryItem", {}).get("media", {}).get("metadata", {}).get("authorName", ""),
+                        "position": s.get("currentTime", 0),
+                        "duration": s.get("libraryItem", {}).get("media", {}).get("metadata", {}).get("duration", 0),
+                        "status": "Playing" if not s.get("stopped", True) else "Paused",
+                    }
+        except Exception:
+            pass
+    return None
+
+
+@register("disks", "Disks", "fa-hard-drive", "system")
+def collect_disks() -> dict:
+    disks = []
+    for part in psutil.disk_partitions(all=False):
+        try:
+            usage = psutil.disk_usage(part.mountpoint)
             disks.append({
                 "device": part.device,
                 "mount": part.mountpoint,
-                "fstype": part.fstype,
-                "total": u.total,
-                "used": u.used,
-                "free": u.free,
-                "percent": u.percent,
+                "total": usage.total,
+                "used": usage.used,
+                "percent": usage.percent,
             })
         except PermissionError:
             pass
-    return disks
+    return {"disks": disks}
 
 
-def _get_processes():
-    """Top processes by CPU and MEM."""
-    procs = []
-    for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent', 'status']):
-        try:
-            info = p.info
-            procs.append({
-                'pid': info['pid'],
-                'name': info['name'] or '--',
-                'cpu': round(info['cpu_percent'] or 0, 1),
-                'mem': round(info['memory_percent'] or 0, 1),
-                'status': info['status'],
-            })
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-    # Sort by CPU desc, take top 8
-    procs.sort(key=lambda x: x['cpu'], reverse=True)
-    return procs[:8]
-
-
-def _get_journal():
-    """Recent journal entries (last 12 lines, errors/warnings prioritized)."""
+@register("docker", "Docker", "fa-docker", "system")
+def collect_docker() -> dict:
     try:
         r = subprocess.run(
-            ['journalctl', '-n', '600', '--no-pager', '-o', 'short-iso'],
+            ["docker", "ps", "--format", "{{.Names}}|{{.Status}}|{{.Image}}"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if r.returncode == 0:
+            containers = []
+            for line in r.stdout.strip().splitlines():
+                parts = line.split("|")
+                if len(parts) >= 3:
+                    containers.append({
+                        "name": parts[0],
+                        "status": parts[1],
+                        "image": parts[2],
+                    })
+            return {"containers": containers}
+    except Exception:
+        pass
+    return {"containers": []}
+
+
+@register("journal", "Journal", "fa-scroll", "logs")
+def collect_journal() -> dict:
+    try:
+        r = subprocess.run(
+            ["journalctl", "-n", "30", "--no-pager", "-o", "short-iso"],
             capture_output=True, text=True, timeout=3,
         )
-        if r.returncode != 0:
-            return []
-        lines = r.stdout.strip().splitlines()
-        entries = []
-        for line in lines[-500:]:
-            # Parse: 2026-05-27T18:00:00-0500 hostname service[pid]: message
-            parts = line.split(None, 5)
-            if len(parts) >= 5:
-                ts = parts[0].split('T')[1][:8] if 'T' in parts[0] else parts[0][-8:]
-                msg = parts[-1] if len(parts) > 5 else parts[-1]
-                # Detect severity
-                level = 'info'
-                lower = msg.lower()
-                if any(w in lower for w in ['error', 'fail', 'crit', 'alert', 'emerg']):
-                    level = 'error'
-                elif any(w in lower for w in ['warn', 'deprecated']):
-                    level = 'warn'
-                entries.append({'time': ts, 'msg': msg[:120], 'level': level})
-        return entries
+        if r.returncode == 0:
+            entries = []
+            for line in r.stdout.strip().splitlines()[-20:]:
+                parts = line.split(None, 5)
+                if len(parts) >= 5:
+                    ts = parts[0] + " " + parts[1]
+                    msg = parts[-1][:120]
+                    lower = msg.lower()
+                    level = "info"
+                    if any(w in lower for w in ["error", "fail", "crit", "alert"]):
+                        level = "error"
+                    elif any(w in lower for w in ["warn", "deprecated"]):
+                        level = "warn"
+                    entries.append({"time": ts, "msg": msg, "level": level})
+            return {"entries": entries}
     except Exception:
-        return []
+        pass
+    return {"entries": []}
 
 
-# Connection history state
-_conn_history = []
-_conn_last_keys = set()
-_conn_last_snapshot = {}
-
-
-def _get_connections():
-    """Active network connections with rolling history."""
-    global _conn_history, _conn_last_keys, _conn_last_snapshot
-    now = time.time()
-    ts = datetime.fromtimestamp(now).strftime('%H:%M:%S')
-
-    # Current snapshot
-    current = {}
-    for c in psutil.net_connections(kind='inet'):
+@register("connections", "Connections", "fa-plug", "network")
+def collect_connections() -> dict:
+    conns = []
+    for c in psutil.net_connections(kind="inet"):
         try:
-            laddr = f"{c.laddr.ip}:{c.laddr.port}" if c.laddr else "--"
-            raddr = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "--"
-            key = f"{c.laddr.ip}:{c.laddr.port}-{c.raddr.ip}:{c.raddr.port}-{c.type}"
-            current[key] = {
-                'proto': 'TCP' if c.type == 1 else 'UDP',
-                'laddr': laddr,
-                'raddr': raddr,
-                'status': c.status or '--',
-            }
+            conns.append({
+                "proto": "TCP" if c.type == 1 else "UDP",
+                "laddr": f"{c.laddr.ip}:{c.laddr.port}" if c.laddr else "--",
+                "raddr": f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "--",
+                "status": c.status or "--",
+            })
         except Exception:
             pass
-
-    current_keys = set(current.keys())
-
-    # Detect new connections (not in last snapshot)
-    for key in current_keys - _conn_last_keys:
-        entry = current[key]
-        entry['time'] = ts
-        entry['event'] = 'open'
-        _conn_history.append(entry)
-
-    # Detect closed connections (were in last snapshot, not anymore)
-    for key in _conn_last_keys - current_keys:
-        if key in _conn_last_snapshot:
-            entry = _conn_last_snapshot[key].copy()
-            entry['time'] = ts
-            entry['event'] = 'close'
-            _conn_history.append(entry)
-
-    _conn_last_keys = current_keys
-    _conn_last_snapshot = current
-
-    # Cap history
-    if len(_conn_history) > 500:
-        _conn_history = _conn_history[-500:]
-
-    return _conn_history[-500:]
+    established = [c for c in conns if c["status"] == "ESTABLISHED"]
+    others = [c for c in conns if c["status"] != "ESTABLISHED"]
+    return {"connections": (established + others)[:30]}
 
 
-def _get_interfaces():
-    """Network interface addresses."""
-    ifaces = []
-    addrs = psutil.net_if_addrs()
-    stats = psutil.net_if_stats()
-    io = psutil.net_io_counters(pernic=True)
-    for name, addr_list in addrs.items():
-        if name == 'lo':
-            continue
-        ips = []
-        for a in addr_list:
-            if a.family.name in ('AF_INET', 'AF_INET6'):
-                ips.append({'family': a.family.name, 'address': a.address})
-        if not ips:
-            continue
-        st = stats.get(name)
-        is_up = st.isup if st else False
-        io_c = io.get(name)
-        speed = st.speed if st else 0
-        ifaces.append({
-            'name': name,
-            'ips': ips,
-            'up': is_up,
-            'speed': speed,
-        })
-    return ifaces
-
-
-# ── Geo endpoint ──────────────────────────────────────────────────────────────
-
-@app.get("/api/geo")
-async def api_geo(lat: float, lon: float):
-    """Accept device geolocation coordinates for weather."""
-    global _geo_coords
-    _geo_coords = (lat, lon)
-    # Clear weather cache so next fetch uses new coords
-    global _weather_cache, _weather_last_fetch
-    _weather_cache = None
-    _weather_last_fetch = 0
-    return {"ok": True, "lat": lat, "lon": lon}
-
-
-# ── Combined endpoint ─────────────────────────────────────────────────────────
-
-@app.get("/api/all")
-async def api_all():
-    """Single payload for initial page load."""
-    cpu_percent = psutil.cpu_percent(interval=0.5)
-    cpu_user, cpu_sys, cpu_idle = _get_cpu_times()
-    mem = psutil.virtual_memory()
-    swap = psutil.swap_memory()
-    rx_rate, tx_rate = _get_network_rates()
-    temps = _get_temps()
-
+@register("uptime", "Uptime / Load", "fa-clock", "system")
+def collect_uptime() -> dict:
+    u = psutil.boot_time()
+    elapsed = time.time() - u
+    days = int(elapsed // 86400)
+    hours = int((elapsed % 86400) // 3600)
+    mins = int((elapsed % 3600) // 60)
+    load = psutil.getloadavg()
+    procs = len(psutil.pids())
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "system": {
-            "cpu_percent": cpu_percent,
-            "cpu_user": cpu_user,
-            "cpu_sys": cpu_sys,
-            "cpu_count": psutil.cpu_count(),
-            "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
-            "mem_total": mem.total,
-            "mem_used": mem.used,
-            "mem_available": mem.available,
-            "mem_percent": mem.percent,
-            "swap_total": swap.total,
-            "swap_used": swap.used,
-            "swap_percent": swap.percent,
-            "rx_rate": rx_rate,
-            "tx_rate": tx_rate,
-            "rx_total": psutil.net_io_counters().bytes_recv,
-            "tx_total": psutil.net_io_counters().bytes_sent,
-            "uptime": time.time() - psutil.boot_time(),
-            "load_avg": list(psutil.getloadavg()),
-            "temps": temps,
-        },
-        "gpu": _get_gpu(),
-        "media": _get_media(),
-        "docker": _get_docker(),
-        "weather": _get_weather(),
-        "disks": _get_disks(),
-        "processes": _get_processes(),
-        "journal": _get_journal(),
-        "connections": _get_connections(),
-        "interfaces": _get_interfaces(),
+        "uptime_seconds": elapsed,
+        "uptime_human": f"{days}d {hours}h {mins}m",
+        "boot_time": datetime.fromtimestamp(u).isoformat(),
+        "load_1m": round(load[0], 2),
+        "load_5m": round(load[1], 2),
+        "load_15m": round(load[2], 2),
+        "processes": procs,
     }
 
 
-# ── SSE stream ────────────────────────────────────────────────────────────────
+@register("ifaces", "Interfaces", "fa-ethernet", "network")
+def collect_ifaces() -> dict:
+    addrs = psutil.net_if_addrs()
+    stats = psutil.net_if_stats()
+    ifaces = []
+    for name, addr_list in addrs.items():
+        ips = []
+        for a in addr_list:
+            if a.family.name in ("AF_INET", "AF_INET6"):
+                ips.append(a.address)
+        s = stats.get(name)
+        ifaces.append({
+            "name": name,
+            "ips": ips,
+            "up": s.isup if s else False,
+            "speed": s.speed if s else 0,
+        })
+    return {"interfaces": ifaces}
+
+
+# ── API Endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "version": "2.0.0", "modules": len(MODULES)}
+
+
+@app.get("/api/modules")
+async def list_modules():
+    """Return registry of all available modules."""
+    return [
+        {"id": m["id"], "title": m["title"], "icon": m["icon"], "category": m["category"]}
+        for m in MODULES.values()
+    ]
+
+
+@app.get("/api/module/{module_id}")
+async def get_module(module_id: str):
+    """Return data for a single module."""
+    if module_id not in MODULES:
+        raise HTTPException(status_code=404, detail=f"Module '{module_id}' not found")
+    mod = MODULES[module_id]
+    data = await asyncio.to_thread(mod["collect"])
+    return {"id": module_id, "data": data}
+
+
+@app.get("/api/all")
+async def get_all():
+    """Return data for all modules."""
+    results = {}
+    for mid, mod in MODULES.items():
+        try:
+            results[mid] = await asyncio.to_thread(mod["collect"])
+        except Exception:
+            results[mid] = None
+    return {"modules": results, "timestamp": datetime.now().isoformat()}
+
 
 @app.get("/api/stream")
-async def api_stream(interval: int = 2):
-    """Server-Sent Events — pushes /api/all every `interval` seconds (1-60)."""
+async def stream(interval: int = 2):
+    """SSE endpoint — pushes /api/all every `interval` seconds."""
     interval = max(1, min(60, interval))
+
     async def gen():
         while True:
-            data = await api_all()
+            data = await get_all()
             yield f"data: {json.dumps(data)}\n\n"
             await asyncio.sleep(interval)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-# ── Static files ──────────────────────────────────────────────────────────────
+# ── Layouts ─────────────────────────────────────────────────────────────────
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    return (_static / "index.html").read_text()
+LAYOUTS = [
+    {
+        "id": "sidebar-stack",
+        "name": "Sidebar Stack",
+        "description": "Persistent left nav, KPI strip at top, stacked content blocks.",
+        "slots": [
+            {"id": "nav", "row": 1, "col": 1, "rowSpan": 4, "colSpan": 1},
+            {"id": "kpi", "row": 1, "col": 2, "rowSpan": 1, "colSpan": 4},
+            {"id": "main-chart", "row": 2, "col": 2, "rowSpan": 1, "colSpan": 4},
+            {"id": "row3", "row": 3, "col": 2, "rowSpan": 1, "colSpan": 4},
+            {"id": "row4", "row": 4, "col": 2, "rowSpan": 1, "colSpan": 4},
+        ],
+        "columns": 5,
+    },
+    {
+        "id": "bento-grid",
+        "name": "Bento Grid",
+        "description": "Mixed card sizes for modular, prioritized layout.",
+        "slots": [
+            {"id": "hero", "row": 1, "col": 1, "rowSpan": 1, "colSpan": 2},
+            {"id": "side1", "row": 1, "col": 3, "rowSpan": 1, "colSpan": 1},
+            {"id": "side2", "row": 1, "col": 4, "rowSpan": 1, "colSpan": 1},
+            {"id": "wide1", "row": 2, "col": 1, "rowSpan": 1, "colSpan": 1},
+            {"id": "wide2", "row": 2, "col": 2, "rowSpan": 1, "colSpan": 1},
+            {"id": "wide3", "row": 2, "col": 3, "rowSpan": 1, "colSpan": 1},
+            {"id": "wide4", "row": 2, "col": 4, "rowSpan": 1, "colSpan": 1},
+            {"id": "row3a", "row": 3, "col": 1, "rowSpan": 1, "colSpan": 1},
+            {"id": "row3b", "row": 3, "col": 2, "rowSpan": 1, "colSpan": 1},
+            {"id": "row3c", "row": 3, "col": 3, "rowSpan": 1, "colSpan": 1},
+            {"id": "row3d", "row": 3, "col": 4, "rowSpan": 1, "colSpan": 1},
+            {"id": "footer", "row": 4, "col": 1, "rowSpan": 1, "colSpan": 4},
+        ],
+        "columns": 4,
+    },
+    {
+        "id": "center-spotlight",
+        "name": "Center Spotlight",
+        "description": "One dominant live panel, side rails for supporting stats.",
+        "slots": [
+            {"id": "header", "row": 1, "col": 1, "rowSpan": 1, "colSpan": 5},
+            {"id": "left", "row": 2, "col": 1, "rowSpan": 2, "colSpan": 1},
+            {"id": "stage", "row": 2, "col": 2, "rowSpan": 2, "colSpan": 3},
+            {"id": "right", "row": 2, "col": 5, "rowSpan": 2, "colSpan": 1},
+            {"id": "bottom", "row": 4, "col": 1, "rowSpan": 1, "colSpan": 5},
+        ],
+        "columns": 5,
+    },
+    {
+        "id": "tabbed-workspace",
+        "name": "Tabbed Workspace",
+        "description": "Category tabs, each with its own canvas.",
+        "slots": [
+            {"id": "toolbar", "row": 1, "col": 1, "rowSpan": 1, "colSpan": 4},
+            {"id": "tabs", "row": 2, "col": 1, "rowSpan": 1, "colSpan": 4},
+            {"id": "ws1", "row": 3, "col": 1, "rowSpan": 1, "colSpan": 1},
+            {"id": "ws2", "row": 3, "col": 2, "rowSpan": 1, "colSpan": 1},
+            {"id": "ws3", "row": 3, "col": 3, "rowSpan": 1, "colSpan": 1},
+            {"id": "ws4", "row": 4, "col": 1, "rowSpan": 1, "colSpan": 4},
+        ],
+        "columns": 4,
+    },
+    {
+        "id": "timeline-board",
+        "name": "Timeline Board",
+        "description": "Center event stream, side context, footer stats.",
+        "slots": [
+            {"id": "header", "row": 1, "col": 1, "rowSpan": 1, "colSpan": 5},
+            {"id": "left", "row": 2, "col": 1, "rowSpan": 2, "colSpan": 1},
+            {"id": "center", "row": 2, "col": 2, "rowSpan": 2, "colSpan": 3},
+            {"id": "right", "row": 2, "col": 5, "rowSpan": 2, "colSpan": 1},
+            {"id": "footer", "row": 4, "col": 1, "rowSpan": 1, "colSpan": 5},
+        ],
+        "columns": 5,
+    },
+    {
+        "id": "two-column",
+        "name": "Two-Column Command",
+        "description": "Wide analysis column + narrow support rail.",
+        "slots": [
+            {"id": "header", "row": 1, "col": 1, "rowSpan": 1, "colSpan": 4},
+            {"id": "kpi-row", "row": 2, "col": 1, "rowSpan": 1, "colSpan": 3},
+            {"id": "main-chart", "row": 3, "col": 1, "rowSpan": 1, "colSpan": 3},
+            {"id": "main-row1", "row": 4, "col": 1, "rowSpan": 1, "colSpan": 3},
+            {"id": "main-row2", "row": 5, "col": 1, "rowSpan": 1, "colSpan": 3},
+            {"id": "rail1", "row": 2, "col": 4, "rowSpan": 1, "colSpan": 1},
+            {"id": "rail2", "row": 3, "col": 4, "rowSpan": 1, "colSpan": 1},
+            {"id": "rail3", "row": 4, "col": 4, "rowSpan": 1, "colSpan": 1},
+            {"id": "rail4", "row": 5, "col": 4, "rowSpan": 1, "colSpan": 1},
+        ],
+        "columns": 4,
+    },
+]
 
 
-app.mount("/static", StaticFiles(directory=str(_static)), name="static")
+@app.get("/api/layouts")
+async def list_layouts():
+    """Return all available layout patterns."""
+    return LAYOUTS
 
-# mount vendor assets from node_modules
-_nm = Path(__file__).resolve().parent.parent / "node_modules"
-if (_nm / "admin-lte" / "dist").exists():
-    app.mount("/vendor/adminlte", StaticFiles(directory=str(_nm / "admin-lte" / "dist")), name="adminlte")
-if (_nm / "bootstrap" / "dist").exists():
-    app.mount("/vendor/bootstrap", StaticFiles(directory=str(_nm / "bootstrap" / "dist")), name="bootstrap")
-if (_nm / "@fortawesome" / "fontawesome-free").exists():
-    app.mount("/vendor/fontawesome", StaticFiles(directory=str(_nm / "@fortawesome" / "fontawesome-free")), name="fontawesome")
-if (_nm / "chart.js" / "dist").exists():
-    app.mount("/vendor/chartjs", StaticFiles(directory=str(_nm / "chart.js" / "dist")), name="chartjs")
-if (_nm / "overlayscrollbars").exists():
-    app.mount("/vendor/overlayscrollbars", StaticFiles(directory=str(_nm / "overlayscrollbars")), name="overlayscrollbars")
+
+# ── Static files (after API routes) ────────────────────────────────────────
+_static = Path(__file__).resolve().parent.parent / "static"
+if _static.exists():
+    app.mount("/", StaticFiles(directory=str(_static), html=True), name="static")
