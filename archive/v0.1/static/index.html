@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ddash</title>
+<style>
+/* ── reset & base ──────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0a0e14;
+  --surface:   #111820;
+  --surface2:  #161d27;
+  --border:    #1c2531;
+  --text:      #c5cdd8;
+  --text-dim:  #5c6a7a;
+  --accent:    #3b82f6;
+  --accent2:   #60a5fa;
+  --green:     #22c55e;
+  --yellow:    #eab308;
+  --red:       #ef4444;
+  --orange:    #f97316;
+  --cyan:      #06b6d4;
+  --purple:    #a855f7;
+  --font:      'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+/* ── cyberpunk 2077 ─────────────────────────────────────────────────────── */
+body.theme-cyberpunk {
+  --bg:        #0a0510;
+  --surface:   #120a1f;
+  --surface2:  #1a0f2e;
+  --border:    #2a1540;
+  --text:      #e0d0f0;
+  --text-dim:  #7a5a9a;
+  --accent:    #fcee09;
+  --accent2:   #fcee09;
+  --green:     #00ff9f;
+  --yellow:    #fcee09;
+  --red:       #ff2060;
+  --orange:    #ff6a00;
+  --cyan:      #00f0ff;
+  --purple:    #bf00ff;
+  --glow:      0 0 8px rgba(252,238,9,0.4);
+}
+/* scanline overlay */
+body.theme-cyberpunk::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 200;
+}
+/* glitch title animation */
+@keyframes cyber-glitch {
+  0%, 90%, 100% { text-shadow: 0 0 10px rgba(252,238,9,0.5); transform: none; }
+  91% { text-shadow: -2px 0 var(--cyan), 2px 0 var(--red); transform: skewX(-1deg); }
+  93% { text-shadow: 2px 0 var(--red), -2px 0 var(--cyan); transform: skewX(1deg); }
+  95% { text-shadow: 0 0 10px rgba(252,238,9,0.5); transform: none; }
+}
+body.theme-cyberpunk .header-title {
+  color: #fcee09;
+  text-shadow: 0 0 10px rgba(252,238,9,0.5);
+  animation: cyber-glitch 4s infinite;
+}
+/* HUD-style widget borders */
+body.theme-cyberpunk .widget {
+  border-left: 1px solid rgba(252,238,9,0.08);
+  position: relative;
+}
+body.theme-cyberpunk .widget::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 8px; height: 8px;
+  border-top: 1px solid var(--accent);
+  border-left: 1px solid var(--accent);
+  opacity: 0.4;
+}
+body.theme-cyberpunk .header {
+  border-bottom: 1px solid rgba(252,238,9,0.2);
+  background: linear-gradient(180deg, rgba(252,238,9,0.03) 0%, transparent 100%);
+}
+body.theme-cyberpunk .gauge-text { text-shadow: var(--glow); }
+body.theme-cyberpunk .conn-status { box-shadow: 0 0 6px var(--green); }
+body.theme-cyberpunk .bar-fill { box-shadow: 0 0 6px currentColor; }
+body.theme-cyberpunk .menu-fab { border-color: var(--accent); }
+body.theme-cyberpunk .menu-fab:hover { box-shadow: 0 0 12px rgba(252,238,9,0.3); }
+body.theme-cyberpunk .docker-chip { border: 1px solid rgba(252,238,9,0.08); }
+body.theme-cyberpunk .disk-item { border: 1px solid rgba(252,238,9,0.06); }
+/* neon pulse on active elements */
+@keyframes cyber-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(0,255,159,0.3); }
+  50% { box-shadow: 0 0 8px rgba(0,255,159,0.6); }
+}
+body.theme-cyberpunk .conn-status:not(.disconnected) {
+  animation: cyber-pulse 2s ease-in-out infinite;
+}
+/* ── cyberpunk shape language: angular cuts, hexagons, diagonals ──────── */
+body.theme-cyberpunk .widget {
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+body.theme-cyberpunk .docker-chip {
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: none;
+  background: rgba(252,238,9,0.06);
+}
+body.theme-cyberpunk .disk-item {
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+  border: none;
+  background: var(--surface2);
+}
+body.theme-cyberpunk .temp-badge {
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+}
+body.theme-cyberpunk .theme-card {
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+body.theme-cyberpunk .menu-fab {
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border-radius: 0;
+}
+body.theme-cyberpunk .opt-btn.active {
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+}
+
+/* ── ocp / robocop ──────────────────────────────────────────────────────── */
+body.theme-ocp {
+  --bg:        #0a0c08;
+  --surface:   #0f120c;
+  --surface2:  #141a12;
+  --border:    #1e2a18;
+  --text:      #c8d8b8;
+  --text-dim:  #4a6a3a;
+  --accent:    #ff6a00;
+  --accent2:   #ff8c40;
+  --green:     #33cc55;
+  --yellow:    #ffaa00;
+  --red:       #ff3333;
+  --orange:    #ff6a00;
+  --cyan:      #5588aa;
+  --purple:    #778866;
+  --glow:      0 0 8px rgba(255,106,0,0.3);
+  --font:      'Courier New', 'Lucida Console', monospace;
+}
+/* heavy CRT scanlines */
+body.theme-ocp::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 1px,
+    rgba(0,0,0,0.15) 1px,
+    rgba(0,0,0,0.15) 3px
+  );
+  pointer-events: none;
+  z-index: 200;
+}
+/* CRT screen curvature */
+body.theme-ocp .dashboard {
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 4px;
+  box-shadow: inset 0 0 60px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,0.8);
+}
+/* phosphor text glow */
+body.theme-ocp .header-title {
+  color: #ff6a00;
+  letter-spacing: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(255,106,0,0.4), 0 0 20px rgba(255,106,0,0.15);
+}
+body.theme-ocp .widget-title {
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 0 4px rgba(255,106,0,0.2);
+}
+body.theme-ocp .header {
+  border-bottom: 2px solid rgba(255,106,0,0.25);
+  background: linear-gradient(180deg, rgba(255,106,0,0.04) 0%, transparent 100%);
+}
+body.theme-ocp .widget {
+  border-left: 1px solid rgba(255,106,0,0.08);
+}
+/* corporate OCP branding bar */
+body.theme-ocp .header::before {
+  content: 'OCP';
+  position: absolute;
+  top: 2px; right: 10px;
+  font-size: 8px;
+  letter-spacing: 3px;
+  color: rgba(255,106,0,0.2);
+  font-weight: 700;
+}
+body.theme-ocp .header { position: relative; }
+body.theme-ocp .gauge-text {
+  text-shadow: 0 0 6px rgba(51,204,85,0.4);
+  font-family: var(--font);
+}
+body.theme-ocp .metric-value {
+  font-family: var(--font);
+  color: var(--green);
+}
+body.theme-ocp .conn-status { box-shadow: 0 0 6px var(--green); }
+body.theme-ocp .bar-fill { box-shadow: 0 0 4px currentColor; }
+/* blocky, industrial docker chips */
+body.theme-ocp .docker-chip {
+  border: 1px solid rgba(255,106,0,0.12);
+  border-radius: 2px;
+  font-family: var(--font);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+body.theme-ocp .disk-item {
+  border: 1px solid rgba(255,106,0,0.08);
+  border-radius: 2px;
+}
+body.theme-ocp .menu-fab { border-color: var(--accent); border-radius: 2px; }
+/* blinking cursor in header */
+@keyframes ocp-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+body.theme-ocp .conn-status::after {
+  content: '_';
+  color: var(--green);
+  animation: ocp-blink 1s step-end infinite;
+  margin-left: 4px;
+  font-weight: 700;
+}
+/* ── ocp shape language: thick blocky industrial ─────────────────────── */
+body.theme-ocp .widget {
+  border: 2px solid rgba(255,106,0,0.12);
+  border-radius: 0;
+}
+body.theme-ocp .docker-chip {
+  border: 2px solid rgba(255,106,0,0.15);
+  border-radius: 0;
+  background: rgba(255,106,0,0.04);
+}
+body.theme-ocp .disk-item {
+  border: 2px solid rgba(255,106,0,0.1);
+  border-radius: 0;
+}
+body.theme-ocp .temp-badge {
+  border: 1px solid rgba(255,106,0,0.15);
+  border-radius: 0;
+}
+body.theme-ocp .theme-card {
+  border: 2px solid var(--border);
+  border-radius: 0;
+}
+body.theme-ocp .theme-card.active {
+  border-color: var(--accent);
+}
+body.theme-ocp .menu-fab {
+  border-radius: 0;
+  border: 2px solid var(--accent);
+}
+body.theme-ocp .opt-btn.active {
+  border-radius: 0;
+  border: 1px solid var(--accent);
+}
+body.theme-ocp .bar-track {
+  border-radius: 0;
+}
+body.theme-ocp .bar-large {
+  border-radius: 0;
+}
+body.theme-ocp .bar-fill {
+  border-radius: 0;
+}
+body.theme-ocp .gauge {
+  border-radius: 0;
+}
+
+/* ── green lantern ───────────────────────────────────────────────────────── */
+body.theme-lantern {
+  --bg:        #020a06;
+  --surface:   #061510;
+  --surface2:  #0a1f18;
+  --border:    #102a1e;
+  --text:      #c8e8d8;
+  --text-dim:  #4a7a60;
+  --accent:    #00ff88;
+  --accent2:   #33ffaa;
+  --green:     #00ff88;
+  --yellow:    #88ff00;
+  --red:       #ff4444;
+  --orange:    #aaff00;
+  --cyan:      #00ddaa;
+  --purple:    #44cc88;
+  --glow:      0 0 12px rgba(0,255,136,0.4);
+}
+/* subtle cosmic grain */
+body.theme-lantern::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(0,255,136,0.02) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(0,221,170,0.015) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 200;
+}
+/* energy pulse on gauges */
+@keyframes lantern-pulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(0,255,136,0.3)); }
+  50% { filter: drop-shadow(0 0 8px rgba(0,255,136,0.6)); }
+}
+body.theme-lantern .gauge {
+  animation: lantern-pulse 3s ease-in-out infinite;
+}
+body.theme-lantern .header-title {
+  color: #00ff88;
+  text-shadow: 0 0 12px rgba(0,255,136,0.4), 0 0 30px rgba(0,255,136,0.15);
+  letter-spacing: 3px;
+}
+body.theme-lantern .header {
+  border-bottom: 1px solid rgba(0,255,136,0.15);
+  background: linear-gradient(180deg, rgba(0,255,136,0.02) 0%, transparent 100%);
+}
+body.theme-lantern .widget {
+  border-left: 1px solid rgba(0,255,136,0.06);
+}
+body.theme-lantern .widget-title {
+  color: var(--accent2);
+  text-shadow: 0 0 6px rgba(0,255,136,0.2);
+}
+body.theme-lantern .gauge-text {
+  text-shadow: var(--glow);
+}
+body.theme-lantern .conn-status { box-shadow: 0 0 8px var(--green); }
+body.theme-lantern .bar-fill.green {
+  box-shadow: 0 0 6px rgba(0,255,136,0.4);
+}
+body.theme-lantern .bar-fill.cyan {
+  box-shadow: 0 0 6px rgba(0,221,170,0.4);
+}
+body.theme-lantern .docker-chip {
+  border: 1px solid rgba(0,255,136,0.08);
+}
+body.theme-lantern .disk-item {
+  border: 1px solid rgba(0,255,136,0.06);
+}
+body.theme-lantern .menu-fab {
+  border-color: rgba(0,255,136,0.3);
+}
+body.theme-lantern .menu-fab:hover {
+  box-shadow: 0 0 16px rgba(0,255,136,0.25);
+}
+/* energy ring on active connection */
+@keyframes lantern-ring {
+  0% { box-shadow: 0 0 4px rgba(0,255,136,0.4); }
+  50% { box-shadow: 0 0 10px rgba(0,255,136,0.7), 0 0 20px rgba(0,255,136,0.2); }
+  100% { box-shadow: 0 0 4px rgba(0,255,136,0.4); }
+}
+body.theme-lantern .conn-status:not(.disconnected) {
+  animation: lantern-ring 2.5s ease-in-out infinite;
+}
+/* ── lantern shape language: diamonds, hexagons, energy prisms ────────── */
+body.theme-lantern .widget {
+  border-radius: 12px;
+  border: 1px solid rgba(0,255,136,0.1);
+}
+body.theme-lantern .docker-chip {
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  background: rgba(0,255,136,0.06);
+  border: none;
+  padding: 6px 16px;
+}
+body.theme-lantern .disk-item {
+  border-radius: 8px;
+  border: 1px solid rgba(0,255,136,0.08);
+}
+body.theme-lantern .temp-badge {
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: rgba(0,255,136,0.08);
+  padding: 4px 10px;
+}
+body.theme-lantern .theme-card {
+  border-radius: 10px;
+  border: 1px solid rgba(0,255,136,0.12);
+}
+body.theme-lantern .theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0,255,136,0.2);
+}
+body.theme-lantern .menu-fab {
+  border-radius: 50%;
+  border: 1px solid rgba(0,255,136,0.3);
+}
+body.theme-lantern .menu-fab:hover {
+  border-radius: 50%;
+}
+body.theme-lantern .opt-btn.active {
+  border-radius: 12px;
+  border: 1px solid var(--accent);
+}
+body.theme-lantern .bar-track {
+  border-radius: 4px;
+}
+body.theme-lantern .bar-large {
+  border-radius: 4px;
+}
+body.theme-lantern .bar-fill {
+  border-radius: 4px;
+}
+body.theme-lantern .gauge {
+  border-radius: 50%;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-x: hidden;
+}
+
+/* ── layout ────────────────────────────────────────────────────────────── */
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto 1fr 1fr auto auto 72px;
+  grid-template-areas:
+    "header  header  header"
+    "cpu     gpu     network"
+    "memory  memory  network"
+    "disks   disks   disks"
+    "docker  docker  docker"
+    "nowplay nowplay nowplay";
+  gap: 1px;
+  background: var(--border);
+  min-height: 100vh;
+}
+
+/* ── widget base ───────────────────────────────────────────────────────── */
+.widget {
+  background: var(--surface);
+  padding: 12px 14px;
+  overflow: hidden;
+}
+
+.widget-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.widget-title .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  display: inline-block;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ── header ────────────────────────────────────────────────────────────── */
+.header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent2);
+  letter-spacing: 2px;
+}
+
+.header-center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.theme-switcher {
+  display: flex;
+  gap: 2px;
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.theme-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.theme-btn:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.theme-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.header-time {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.header-date {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.weather {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-temp {
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--text);
+}
+
+.weather-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.weather-detail {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.uptime {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ── cpu / gpu / memory / network ──────────────────────────────────────── */
+.big-number {
+  font-size: 32px;
+  font-weight: 200;
+  color: var(--text);
+  line-height: 1;
+}
+
+.big-number .unit {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.metric-label {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.metric-value {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ── progress bars ─────────────────────────────────────────────────────── */
+.bar-track {
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease, background 0.3s;
+}
+
+.bar-fill.green  { background: var(--green); }
+.bar-fill.yellow { background: var(--yellow); }
+.bar-fill.red    { background: var(--red); }
+.bar-fill.accent { background: var(--accent); }
+.bar-fill.cyan   { background: var(--cyan); }
+
+.bar-large {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.bar-large .bar-fill {
+  border-radius: 4px;
+}
+
+/* ── gauge (ring) ──────────────────────────────────────────────────────── */
+.gauge {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.gauge svg {
+  transform: rotate(-90deg);
+}
+
+.gauge-bg {
+  fill: none;
+  stroke: var(--surface2);
+  stroke-width: 6;
+}
+
+.gauge-fill {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease, stroke 0.3s;
+}
+
+.gauge-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 300;
+  color: var(--text);
+}
+
+.gauge-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+/* ── media ─────────────────────────────────────────────────────────────── */
+.media-widget {
+  grid-area: nowplay;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+}
+
+.media-status {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.media-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-artist {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.media-source {
+  font-size: 10px;
+  color: var(--accent);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.media-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.media-progress .bar-track {
+  flex: 1;
+  height: 3px;
+}
+
+.media-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.media-idle {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* ── network ───────────────────────────────────────────────────────────── */
+.net-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.net-rate .arrow { font-size: 10px; }
+.net-rate .arrow.up { color: var(--green); }
+.net-rate .arrow.down { color: var(--cyan); }
+
+/* ── disks ─────────────────────────────────────────────────────────────── */
+.disks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.disk-item {
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+.disk-mount {
+  font-size: 12px;
+  color: var(--accent2);
+  margin-bottom: 2px;
+}
+
+.disk-device {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.disk-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ── docker ────────────────────────────────────────────────────────────── */
+.docker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.docker-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.docker-chip .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.docker-chip .status-dot.running { background: var(--green); }
+.docker-chip .status-dot.exited  { background: var(--red); }
+.docker-chip .status-dot.paused  { background: var(--yellow); }
+
+.docker-chip .name { color: var(--text); }
+.docker-chip .detail { color: var(--text-dim); font-size: 10px; }
+
+/* ── temps ─────────────────────────────────────────────────────────────── */
+.temp-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.temp-badge {
+  background: var(--surface2);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.temp-badge .label { color: var(--text-dim); }
+.temp-badge .val { color: var(--text); margin-left: 4px; }
+.temp-badge .val.hot { color: var(--red); }
+.temp-badge .val.warm { color: var(--orange); }
+
+/* ── connection indicator ──────────────────────────────────────────────── */
+.conn-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.conn-status.disconnected {
+  background: var(--red);
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* ── menu ────────────────────────────────────────────────────────────────── */
+.menu-fab {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.menu-fab:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.menu-fab .bar {
+  width: 16px;
+  height: 2px;
+  background: var(--text-dim);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.menu-fab .bar::before,
+.menu-fab .bar::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  background: var(--text-dim);
+  left: 0;
+  transition: background 0.2s, transform 0.3s;
+}
+
+.menu-fab .bar::before { top: -5px; }
+.menu-fab .bar::after  { top: 5px; }
+
+.menu-fab.open .bar { background: transparent; }
+.menu-fab.open .bar::before { top: 0; transform: rotate(45deg); background: var(--accent); }
+.menu-fab.open .bar::after  { top: 0; transform: rotate(-45deg); background: var(--accent); }
+
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 90;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.menu-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  max-width: 90vw;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 95;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.menu-panel.open {
+  transform: translateX(0);
+}
+
+.menu-panel h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin: 20px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.menu-panel h2:first-child {
+  margin-top: 0;
+}
+
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.menu-label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.menu-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* option buttons */
+.opt-group {
+  display: flex;
+  gap: 2px;
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.opt-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.opt-btn:hover {
+  color: var(--text);
+}
+
+.opt-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* theme grid inside menu */
+.theme-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.theme-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  text-align: center;
+}
+
+.theme-card:hover {
+  border-color: var(--accent);
+}
+
+.theme-card.active {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.theme-card .swatch {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.theme-card .swatch span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.theme-card .name {
+  font-size: 10px;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+
+/* text input */
+.menu-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 10px;
+  width: 140px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.menu-input:focus {
+  border-color: var(--accent);
+}
+
+/* toggle switch */
+.toggle {
+  width: 36px;
+  height: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: var(--text);
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s;
+}
+
+.toggle.on::after {
+  transform: translateX(16px);
+  background: var(--bg);
+}
+
+/* ── compact mode ──────────────────────────────────────────────────────── */
+body.compact .widget { padding: 8px 10px; }
+body.compact .widget-title { font-size: 9px; margin-bottom: 4px; }
+body.compact .big-number { font-size: 24px; }
+body.compact .gauge { width: 60px; height: 60px; }
+body.compact .gauge-text { font-size: 13px; }
+body.compact .metric-row { padding: 1px 0; }
+body.compact .metric-label { font-size: 10px; }
+body.compact .metric-value { font-size: 11px; }
+body.compact .bar-large { height: 5px; }
+body.compact .temp-badge { padding: 1px 6px; font-size: 10px; }
+body.compact .disk-item { padding: 6px 8px; }
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .dashboard {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "header  header"
+      "cpu     gpu"
+      "memory  network"
+      "disks   disks"
+      "docker  docker"
+      "nowplay nowplay";
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "cpu"
+      "gpu"
+      "memory"
+      "network"
+      "disks"
+      "docker"
+      "nowplay";
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="dashboard">
+  <!-- header -->
+  <div class="header widget" style="grid-area: header">
+    <div class="header-left">
+      <div class="weather" id="weather">
+        <span class="weather-temp" id="w-temp">--°</span>
+        <div>
+          <div class="weather-desc" id="w-desc">loading…</div>
+          <div class="weather-detail" id="w-detail"></div>
+        </div>
+      </div>
+    </div>
+    <div class="header-center">
+      <span class="header-title">DDASH</span>
+      <div class="conn-status" id="conn" title="SSE connected"></div>
+    </div>
+    <div class="header-right">
+      <div>
+        <div class="header-time" id="clock">--:--:--</div>
+        <div class="header-date" id="date-display">---</div>
+      </div>
+      <div class="uptime" id="uptime">up --</div>
+    </div>
+  </div>
+
+  <!-- cpu -->
+  <div class="widget" style="grid-area: cpu">
+    <div class="widget-title"><span class="dot"></span>CPU</div>
+    <div class="gauge-row">
+      <div class="gauge">
+        <svg viewBox="0 0 36 36">
+          <circle class="gauge-bg" cx="18" cy="18" r="14"></circle>
+          <circle class="gauge-fill" id="cpu-ring" cx="18" cy="18" r="14"
+                  stroke-dasharray="87.96" stroke-dashoffset="87.96"></circle>
+        </svg>
+        <div class="gauge-text" id="cpu-pct">0%</div>
+      </div>
+      <div style="flex:1">
+        <div class="metric-row"><span class="metric-label">User</span><span class="metric-value" id="cpu-user">--</span></div>
+        <div class="metric-row"><span class="metric-label">System</span><span class="metric-value" id="cpu-sys">--</span></div>
+        <div class="metric-row"><span class="metric-label">Cores</span><span class="metric-value" id="cpu-cores">--</span></div>
+        <div class="metric-row"><span class="metric-label">Freq</span><span class="metric-value" id="cpu-freq">--</span></div>
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <div class="widget-title" style="margin-bottom:4px">Temps</div>
+      <div class="temp-grid" id="temps"></div>
+    </div>
+  </div>
+
+  <!-- gpu -->
+  <div class="widget" style="grid-area: gpu">
+    <div class="widget-title"><span class="dot"></span>GPU</div>
+    <div id="gpu-content">
+      <div class="gauge-row">
+        <div class="gauge">
+          <svg viewBox="0 0 36 36">
+            <circle class="gauge-bg" cx="18" cy="18" r="14"></circle>
+            <circle class="gauge-fill" id="gpu-ring" cx="18" cy="18" r="14"
+                    stroke-dasharray="87.96" stroke-dashoffset="87.96"></circle>
+          </svg>
+          <div class="gauge-text" id="gpu-pct">0%</div>
+        </div>
+        <div style="flex:1">
+          <div class="metric-row"><span class="metric-label">Name</span><span class="metric-value" id="gpu-name">--</span></div>
+          <div class="metric-row"><span class="metric-label">Temp</span><span class="metric-value" id="gpu-temp">--</span></div>
+          <div class="metric-row"><span class="metric-label">Power</span><span class="metric-value" id="gpu-power">--</span></div>
+          <div class="metric-row"><span class="metric-label">Fan</span><span class="metric-value" id="gpu-fan">--</span></div>
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <div class="metric-row">
+          <span class="metric-label">VRAM</span>
+          <span class="metric-value" id="gpu-mem">--</span>
+        </div>
+        <div class="bar-track bar-large">
+          <div class="bar-fill accent" id="gpu-mem-bar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- memory -->
+  <div class="widget" style="grid-area: memory">
+    <div class="widget-title"><span class="dot"></span>Memory</div>
+    <div class="metric-row">
+      <span class="metric-label">RAM</span>
+      <span class="metric-value" id="mem-pct">--</span>
+    </div>
+    <div class="bar-track bar-large">
+      <div class="bar-fill" id="mem-bar" style="width:0%"></div>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label" id="mem-detail">-- / --</span>
+      <span class="metric-value" id="mem-avail">avail --</span>
+    </div>
+    <div style="margin-top:8px">
+      <div class="metric-row">
+        <span class="metric-label">Swap</span>
+        <span class="metric-value" id="swap-pct">--</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" id="swap-bar" style="width:0%"></div>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label" id="swap-detail">-- / --</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- network -->
+  <div class="widget" style="grid-area: network">
+    <div class="widget-title"><span class="dot"></span>Network</div>
+    <div style="margin-bottom:8px">
+      <div class="net-rate">
+        <span class="arrow down">↓</span>
+        <span class="metric-value" id="net-rx">--</span>
+      </div>
+      <div class="net-rate">
+        <span class="arrow up">↑</span>
+        <span class="metric-value" id="net-tx">--</span>
+      </div>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Total RX</span>
+      <span class="metric-value" id="net-rx-total">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Total TX</span>
+      <span class="metric-value" id="net-tx-total">--</span>
+    </div>
+    <div style="margin-top:8px">
+      <div class="metric-row">
+        <span class="metric-label">Load Avg</span>
+        <span class="metric-value" id="load-avg">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- media -->
+  <div class="widget media-widget">
+    <div class="widget-title" style="margin-bottom:0; white-space:nowrap"><span class="dot"></span>Now Playing</div>
+    <div id="media-content" style="flex:1; overflow:hidden">
+      <div class="media-idle">No media playing</div>
+    </div>
+  </div>
+
+  <!-- disks -->
+  <div class="widget" style="grid-area: disks">
+    <div class="widget-title"><span class="dot"></span>Disks</div>
+    <div class="disks-grid" id="disks"></div>
+  </div>
+
+  <!-- docker -->
+  <div class="widget" style="grid-area: docker">
+    <div class="widget-title"><span class="dot"></span>Docker</div>
+    <div class="docker-grid" id="docker"></div>
+  </div>
+</div>
+
+<!-- menu -->
+<div class="menu-overlay" id="menu-overlay"></div>
+<div class="menu-panel" id="menu-panel">
+  <h2>Theme</h2>
+  <div class="theme-grid" id="theme-grid">
+    <div class="theme-card active" data-theme="">
+      <div class="swatch">
+        <span style="background:#3b82f6"></span>
+        <span style="background:#22c55e"></span>
+        <span style="background:#c5cdd8"></span>
+        <span style="background:#111820"></span>
+      </div>
+      <div class="name">Default</div>
+    </div>
+    <div class="theme-card" data-theme="theme-cyberpunk">
+      <div class="swatch">
+        <span style="background:#fcee09; box-shadow:0 0 4px #fcee09"></span>
+        <span style="background:#00f0ff; box-shadow:0 0 4px #00f0ff"></span>
+        <span style="background:#ff2060; box-shadow:0 0 4px #ff2060"></span>
+        <span style="background:#1a0f2e"></span>
+      </div>
+      <div class="name">Cyberpunk 2077</div>
+    </div>
+    <div class="theme-card" data-theme="theme-ocp">
+      <div class="swatch">
+        <span style="background:#ff6a00; box-shadow:0 0 4px #ff6a00"></span>
+        <span style="background:#33cc55; box-shadow:0 0 4px #33cc55"></span>
+        <span style="background:#c8d8b8"></span>
+        <span style="background:#0a0c08"></span>
+      </div>
+      <div class="name">OCP / RoboCop</div>
+    </div>
+    <div class="theme-card" data-theme="theme-lantern">
+      <div class="swatch">
+        <span style="background:#00ff88; box-shadow:0 0 6px #00ff88"></span>
+        <span style="background:#33ffaa; box-shadow:0 0 4px #33ffaa"></span>
+        <span style="background:#00ddaa"></span>
+        <span style="background:#020a06"></span>
+      </div>
+      <div class="name">Green Lantern</div>
+    </div>
+  </div>
+
+  <h2>Data</h2>
+  <div class="menu-section">
+    <div class="menu-row">
+      <span class="menu-label">Refresh Rate</span>
+      <div class="opt-group" id="refresh-opts">
+        <button class="opt-btn" data-val="1">1s</button>
+        <button class="opt-btn active" data-val="2">2s</button>
+        <button class="opt-btn" data-val="5">5s</button>
+        <button class="opt-btn" data-val="10">10s</button>
+        <button class="opt-btn" data-val="30">30s</button>
+      </div>
+    </div>
+  </div>
+
+  <h2>Display</h2>
+  <div class="menu-section">
+    <div class="menu-row">
+      <span class="menu-label">Temperature Unit</span>
+      <div class="opt-group" id="temp-unit-opts">
+        <button class="opt-btn active" data-val="F">°F</button>
+        <button class="opt-btn" data-val="C">°C</button>
+      </div>
+    </div>
+    <div class="menu-row">
+      <span class="menu-label">Clock Format</span>
+      <div class="opt-group" id="clock-opts">
+        <button class="opt-btn active" data-val="24">24h</button>
+        <button class="opt-btn" data-val="12">12h</button>
+      </div>
+    </div>
+    <div class="menu-row">
+      <span class="menu-label">Compact Mode</span>
+      <div class="toggle" id="compact-toggle"></div>
+    </div>
+  </div>
+
+  <h2>Location</h2>
+  <div class="menu-section">
+    <div class="menu-row">
+      <span class="menu-label">Weather City</span>
+      <input class="menu-input" id="weather-city" type="text" placeholder="Chicago" spellcheck="false">
+    </div>
+    <div class="menu-hint">Changes apply on next refresh</div>
+  </div>
+
+  <h2>Connection</h2>
+  <div class="menu-section">
+    <div class="menu-row">
+      <span class="menu-label">Status</span>
+      <span class="menu-label" id="menu-conn-status" style="color:var(--green)">Connected</span>
+    </div>
+    <div class="menu-row">
+      <span class="menu-label">Last Update</span>
+      <span class="menu-label" id="menu-last-update" style="color:var(--text-dim)">--</span>
+    </div>
+  </div>
+</div>
+
+<div class="menu-fab" id="menu-fab"><div class="bar"></div></div>
+
+<script>
+// ── helpers ──────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function fmtBytes(b) {
+  for (const u of ['B','KB','MB','GB','TB']) {
+    if (Math.abs(b) < 1024) return b.toFixed(b < 10 ? 1 : 0) + ' ' + u;
+    b /= 1024;
+  }
+  return b.toFixed(1) + ' PB';
+}
+
+function fmtRate(bps) { return fmtBytes(bps) + '/s'; }
+
+function fmtTime(sec) {
+  sec = Math.floor(sec);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    : `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function fmtUptime(sec) {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  let s = 'up ';
+  if (d > 0) s += d + 'd ';
+  if (h > 0) s += h + 'h ';
+  s += m + 'm';
+  return s;
+}
+
+function barColor(pct) {
+  if (pct < 60) return 'green';
+  if (pct < 85) return 'yellow';
+  return 'red';
+}
+
+function setGauge(ringId, pctId, pct) {
+  const ring = $(ringId);
+  const text = $(pctId);
+  const circ = 87.96;
+  const offset = circ - (circ * Math.min(100, pct) / 100);
+  ring.style.strokeDashoffset = offset;
+  ring.style.stroke = pct < 60 ? 'var(--green)' : pct < 85 ? 'var(--yellow)' : 'var(--red)';
+  text.textContent = Math.round(pct) + '%';
+}
+
+function setBar(barId, pct) {
+  const bar = $(barId);
+  bar.style.width = Math.min(100, pct) + '%';
+  bar.className = 'bar-fill ' + barColor(pct);
+}
+
+// ── data update ──────────────────────────────────────────────────────────
+function update(d) {
+  const sys = d.system;
+
+  // cpu
+  setGauge('cpu-ring', 'cpu-pct', sys.cpu_percent);
+  $('cpu-user').textContent = sys.cpu_user.toFixed(1) + '%';
+  $('cpu-sys').textContent = sys.cpu_sys.toFixed(1) + '%';
+  $('cpu-cores').textContent = sys.cpu_count;
+  $('cpu-freq').textContent = sys.cpu_freq
+    ? (sys.cpu_freq.current / 1000).toFixed(1) + ' GHz'
+    : '--';
+
+  // temps
+  const tempsEl = $('temps');
+  const temps = sys.temps || {};
+  const tempEntries = Object.entries(temps);
+  if (tempEntries.length) {
+    tempsEl.innerHTML = tempEntries.map(([k, v]) => {
+      const cls = v > 80 ? 'hot' : v > 65 ? 'warm' : '';
+      const short = k.replace(/-.*/, '').replace(/_pci.*/, '');
+      return `<span class="temp-badge"><span class="label">${short}</span><span class="val ${cls}">${v}°C</span></span>`;
+    }).join('');
+  }
+
+  // gpu
+  const g = d.gpu;
+  if (g) {
+    $('gpu-name').textContent = g.name;
+    setGauge('gpu-ring', 'gpu-pct', g.gpu_util);
+    $('gpu-temp').textContent = g.temp + '°C';
+    $('gpu-temp').style.color = g.temp > 80 ? 'var(--red)' : g.temp > 65 ? 'var(--orange)' : 'var(--text)';
+    $('gpu-power').textContent = g.power_draw.toFixed(0) + 'W / ' + g.power_limit.toFixed(0) + 'W';
+    $('gpu-fan').textContent = g.fan_speed >= 0 ? g.fan_speed.toFixed(0) + '%' : '--';
+    const memPct = g.mem_total ? (g.mem_used / g.mem_total * 100) : 0;
+    $('gpu-mem').textContent = g.mem_used + ' / ' + g.mem_total + ' MB';
+    setBar('gpu-mem-bar', memPct);
+  }
+
+  // memory
+  const memPct = sys.mem_percent;
+  $('mem-pct').textContent = memPct.toFixed(1) + '%';
+  setBar('mem-bar', memPct);
+  $('mem-detail').textContent = fmtBytes(sys.mem_used) + ' / ' + fmtBytes(sys.mem_total);
+  $('mem-avail').textContent = 'avail ' + fmtBytes(sys.mem_available);
+
+  // swap
+  if (sys.swap_total > 0) {
+    $('swap-pct').textContent = sys.swap_percent.toFixed(1) + '%';
+    setBar('swap-bar', sys.swap_percent);
+    $('swap-detail').textContent = fmtBytes(sys.swap_used) + ' / ' + fmtBytes(sys.swap_total);
+  } else {
+    $('swap-pct').textContent = 'none';
+    setBar('swap-bar', 0);
+    $('swap-detail').textContent = '';
+  }
+
+  // network
+  $('net-rx').textContent = fmtRate(sys.rx_rate);
+  $('net-tx').textContent = fmtRate(sys.tx_rate);
+  $('net-rx-total').textContent = fmtBytes(sys.rx_total);
+  $('net-tx-total').textContent = fmtBytes(sys.tx_total);
+
+  // load avg
+  const la = sys.load_avg;
+  $('load-avg').textContent = la.map(v => v.toFixed(2)).join('  ');
+
+  // uptime
+  $('uptime').textContent = fmtUptime(sys.uptime);
+
+  // media
+  const m = d.media;
+  const mc = $('media-content');
+  if (m) {
+    const pct = m.dur > 0 ? Math.min(100, (m.pos / m.dur) * 100) : 0;
+    const icon = m.status === 'Playing' ? '▶' : '⏸';
+    const color = m.status === 'Playing' ? 'var(--green)' : 'var(--yellow)';
+    const info = m.artist ? `${esc(m.artist)} — ${esc(m.title)}` : esc(m.title);
+    mc.innerHTML = `
+      <span style="color:${color}; font-size:12px; white-space:nowrap">${icon}</span>
+      <span class="media-source">${m.source}</span>
+      <span class="media-title" style="flex:1; min-width:0">${info}</span>
+      <div class="media-progress" style="flex:2; min-width:100px">
+        <span class="media-time">${fmtTime(m.pos)}</span>
+        <div class="bar-track"><div class="bar-fill accent" style="width:${pct}%"></div></div>
+        <span class="media-time">${fmtTime(m.dur)}</span>
+      </div>
+    `;
+  } else {
+    mc.innerHTML = '<div class="media-idle">No media playing</div>';
+  }
+
+  // disks
+  const disksEl = $('disks');
+  disksEl.innerHTML = d.disks.map(dk => `
+    <div class="disk-item">
+      <div class="disk-mount">${dk.mount}</div>
+      <div class="disk-device">${dk.device} · ${dk.fstype}</div>
+      <div class="bar-track bar-large">
+        <div class="bar-fill ${barColor(dk.percent)}" style="width:${dk.percent}%"></div>
+      </div>
+      <div class="disk-info">
+        <span>${fmtBytes(dk.used)} / ${fmtBytes(dk.total)}</span>
+        <span>${dk.percent}%</span>
+      </div>
+    </div>
+  `).join('');
+
+  // docker
+  const dockerEl = $('docker');
+  if (d.docker.length === 0) {
+    dockerEl.innerHTML = '<span style="color:var(--text-dim)">No containers</span>';
+  } else {
+    dockerEl.innerHTML = d.docker.map(c => `
+      <div class="docker-chip">
+        <span class="status-dot ${c.state}"></span>
+        <span class="name">${c.name}</span>
+        <span class="detail">${c.state} · ${c.image.split('/').pop()}</span>
+      </div>
+    `).join('');
+  }
+
+  // weather
+  const w = d.weather;
+  if (w) {
+    const tf = settings.tempUnit === 'C' ? Math.round((w.temp_f - 32) * 5/9) : w.temp_f;
+    $('w-temp').textContent = tf + '°' + settings.tempUnit;
+    $('w-desc').textContent = w.description;
+    const ff = settings.tempUnit === 'C' ? Math.round((w.feels_like_f - 32) * 5/9) : w.feels_like_f;
+    $('w-detail').textContent = `Feels ${ff}°${settings.tempUnit} · ${w.humidity}% humid · ${w.wind_mph}mph ${w.wind_dir}`;
+  }
+}
+
+function esc(s) {
+  const el = document.createElement('span');
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+// ── settings ─────────────────────────────────────────────────────────────
+const SETTINGS_KEY = 'ddash-settings';
+const defaults = {
+  theme: '',
+  refresh: 2,
+  tempUnit: 'F',
+  clock24: true,
+  compact: false,
+  weatherCity: 'Chicago',
+};
+let settings = Object.assign({}, defaults, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'));
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+// ── theme ────────────────────────────────────────────────────────────────
+function setTheme(cls) {
+  document.body.className = cls;
+  settings.theme = cls;
+  saveSettings();
+  document.querySelectorAll('.theme-card').forEach(c => {
+    c.classList.toggle('active', c.dataset.theme === cls);
+  });
+}
+
+document.getElementById('theme-grid').addEventListener('click', e => {
+  const card = e.target.closest('.theme-card');
+  if (card) setTheme(card.dataset.theme);
+});
+
+// ── menu toggle ──────────────────────────────────────────────────────────
+const fab = document.getElementById('menu-fab');
+const panel = document.getElementById('menu-panel');
+const overlay = document.getElementById('menu-overlay');
+
+function toggleMenu() {
+  const open = panel.classList.toggle('open');
+  fab.classList.toggle('open', open);
+  overlay.classList.toggle('open', open);
+}
+
+fab.addEventListener('click', toggleMenu);
+overlay.addEventListener('click', toggleMenu);
+
+// ── opt-group buttons ────────────────────────────────────────────────────
+function wireOptGroup(id, current, onChange) {
+  const group = $(id);
+  if (!group) return;
+  group.querySelectorAll('.opt-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === String(current));
+    btn.addEventListener('click', () => {
+      group.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      onChange(btn.dataset.val);
+    });
+  });
+}
+
+// refresh rate
+wireOptGroup('refresh-opts', settings.refresh, val => {
+  settings.refresh = parseInt(val);
+  saveSettings();
+  reconnect();
+});
+
+// temp unit
+wireOptGroup('temp-unit-opts', settings.tempUnit, val => {
+  settings.tempUnit = val;
+  saveSettings();
+});
+
+// clock format
+wireOptGroup('clock-opts', settings.clock24 ? '24' : '12', val => {
+  settings.clock24 = val === '24';
+  saveSettings();
+  updateClock();
+});
+
+// compact mode
+const compactToggle = $('compact-toggle');
+compactToggle.classList.toggle('on', settings.compact);
+compactToggle.addEventListener('click', () => {
+  settings.compact = !settings.compact;
+  compactToggle.classList.toggle('on', settings.compact);
+  document.body.classList.toggle('compact', settings.compact);
+  saveSettings();
+});
+
+// weather city
+const cityInput = $('weather-city');
+cityInput.value = settings.weatherCity;
+let cityDebounce;
+cityInput.addEventListener('input', () => {
+  clearTimeout(cityDebounce);
+  cityDebounce = setTimeout(() => {
+    settings.weatherCity = cityInput.value.trim() || 'Chicago';
+    saveSettings();
+  }, 800);
+});
+
+// ── apply saved settings on load ─────────────────────────────────────────
+if (settings.theme) setTheme(settings.theme);
+if (settings.compact) document.body.classList.add('compact');
+
+// ── clock (respects 12/24h) ──────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  $('clock').textContent = now.toLocaleTimeString('en-US', { hour12: !settings.clock24 });
+  $('date-display').textContent = now.toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+  });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── SSE (respects refresh interval) ──────────────────────────────────────
+let sse = null;
+let reconnectTimer = null;
+
+function connect() {
+  if (sse) { sse.close(); sse = null; }
+  clearTimeout(reconnectTimer);
+
+  sse = new EventSource('/api/stream?interval=' + settings.refresh);
+
+  sse.onopen = () => {
+    $('conn').classList.remove('disconnected');
+    $('conn').title = 'SSE connected';
+    const ms = $('menu-conn-status');
+    if (ms) { ms.textContent = 'Connected'; ms.style.color = 'var(--green)'; }
+  };
+
+  sse.onmessage = (ev) => {
+    try {
+      const d = JSON.parse(ev.data);
+      update(d);
+      const lm = $('menu-last-update');
+      if (lm) lm.textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+    } catch (e) {
+      console.error('parse error', e);
+    }
+  };
+
+  sse.onerror = () => {
+    sse.close();
+    sse = null;
+    $('conn').classList.add('disconnected');
+    $('conn').title = 'SSE disconnected — reconnecting…';
+    const ms = $('menu-conn-status');
+    if (ms) { ms.textContent = 'Disconnected'; ms.style.color = 'var(--red)'; }
+    reconnectTimer = setTimeout(connect, 3000);
+  };
+}
+
+function reconnect() {
+  connect();
+}
+
+// initial load
+fetch('/api/all')
+  .then(r => r.json())
+  .then(update)
+  .catch(() => {});
+
+connect();
+</script>
+</body>
+</html>
