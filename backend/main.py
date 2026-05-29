@@ -80,3 +80,8 @@ if _static.exists():
 @app.get("/")
 async def root():
     return FileResponse(str(_static / "index.html"), media_type="text/html")
+
+
+@app.get("/editor")
+async def editor():
+    return FileResponse(str(_static / "editor.html"), media_type="text/html")

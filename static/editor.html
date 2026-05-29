@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ddash — Layout Editor</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/static/css/editor.css">
+</head>
+<body>
+  <div class="editor-shell">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-brand">DDASH</span>
+        <span class="topbar-sep">·</span>
+        <span class="topbar-title">Layout Editor</span>
+      </div>
+      <div class="topbar-center">
+        <div class="preset-tabs" id="preset-tabs"></div>
+      </div>
+      <div class="topbar-right">
+        <button class="tb-btn" id="btn-undo" title="Undo (Ctrl+Z)"><i class="fas fa-undo"></i></button>
+        <button class="tb-btn" id="btn-redo" title="Redo (Ctrl+Y)"><i class="fas fa-redo"></i></button>
+        <span class="tb-sep"></span>
+        <button class="tb-btn" id="btn-preview" title="Preview"><i class="fas fa-eye"></i></button>
+        <button class="tb-btn" id="btn-save" title="Save JSON"><i class="fas fa-download"></i></button>
+        <button class="tb-btn" id="btn-load" title="Load JSON"><i class="fas fa-upload"></i></button>
+        <button class="tb-btn primary" id="btn-apply" title="Apply to dashboard">Apply</button>
+      </div>
+    </header>
+
+    <div class="editor-body">
+      <!-- Left sidebar: element palette -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">Modules</div>
+          <div class="palette" id="palette-modules"></div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Structure</div>
+          <div class="palette" id="palette-structure"></div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Properties</div>
+          <div class="props-panel" id="props-panel">
+            <div class="props-empty">Select an element to edit</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Canvas -->
+      <main class="canvas-area">
+        <div class="canvas-toolbar">
+          <span class="ct-label">Grid</span>
+          <input type="number" id="grid-cols" class="ct-input" min="2" max="12" value="4">
+          <span class="ct-label">×</span>
+          <input type="number" id="grid-rows" class="ct-input" min="2" max="12" value="6">
+          <span class="ct-sep"></span>
+          <button class="ct-btn" id="btn-add-row" title="Add row"><i class="fas fa-plus"></i> Row</button>
+          <button class="ct-btn" id="btn-add-col" title="Add column"><i class="fas fa-plus"></i> Col</button>
+          <button class="ct-btn" id="btn-clear" title="Clear canvas"><i class="fas fa-trash"></i> Clear</button>
+        </div>
+        <div class="canvas-scroll">
+          <div class="canvas" id="canvas"></div>
+        </div>
+      </main>
+
+      <!-- Right sidebar: layout info -->
+      <aside class="sidebar right" id="sidebar-right">
+        <div class="sidebar-section">
+          <div class="sidebar-label">Layout Info</div>
+          <div class="info-panel">
+            <label class="info-row"><span>Name</span><input type="text" id="layout-name" value="Untitled" class="info-input"></label>
+            <label class="info-row"><span>Description</span><textarea id="layout-desc" class="info-input" rows="2"></textarea></label>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-label">Elements</div>
+          <div class="element-list" id="element-list"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Preview overlay -->
+  <div class="preview-overlay" id="preview-overlay">
+    <div class="preview-topbar">
+      <span>Preview Mode</span>
+      <button class="tb-btn" id="btn-exit-preview"><i class="fas fa-times"></i> Exit</button>
+    </div>
+    <div class="preview-canvas" id="preview-canvas"></div>
+  </div>
+
+  <!-- Hidden file input for load -->
+  <input type="file" id="file-input" accept=".json" style="display:none">
+
+  <script src="/static/js/editor.js"></script>
+</body>
+</html>
