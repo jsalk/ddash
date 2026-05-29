@@ -32,57 +32,70 @@ const STRUCT_TYPES = [
 ];
 
 const PRESETS = [
+  // Sidebar Stack: nav rail + KPI strip + stacked content
   { id: 'sidebar-stack', name: 'Sidebar Stack', cols: 5, rows: 5, elements: [
-    { type: 'cpu', col: 2, row: 1, colSpan: 4, rowSpan: 1 },
-    { type: 'gpu', col: 2, row: 2, colSpan: 2, rowSpan: 1 },
-    { type: 'memory', col: 4, row: 2, colSpan: 2, rowSpan: 1 },
-    { type: 'network', col: 2, row: 3, colSpan: 4, rowSpan: 1 },
-    { type: 'disks', col: 2, row: 4, colSpan: 4, rowSpan: 1 },
+    { type: 'cpu', col: 1, row: 1, colSpan: 1, rowSpan: 5 },
+    { type: 'gpu', col: 2, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'memory', col: 3, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'network', col: 4, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'temps', col: 5, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'journal', col: 2, row: 2, colSpan: 4, rowSpan: 2 },
+    { type: 'connections', col: 2, row: 4, colSpan: 4, rowSpan: 2 },
   ]},
+  // Bento Grid: mixed card sizes, hero + supporting tiles
   { id: 'bento-grid', name: 'Bento Grid', cols: 4, rows: 5, elements: [
     { type: 'cpu', col: 1, row: 1, colSpan: 2, rowSpan: 2 },
     { type: 'gpu', col: 3, row: 1, colSpan: 2, rowSpan: 1 },
     { type: 'temps', col: 3, row: 2, colSpan: 2, rowSpan: 1 },
     { type: 'memory', col: 1, row: 3, colSpan: 1, rowSpan: 1 },
     { type: 'network', col: 2, row: 3, colSpan: 1, rowSpan: 1 },
-    { type: 'nowplaying', col: 3, row: 3, colSpan: 2, rowSpan: 1 },
-    { type: 'disks', col: 1, row: 4, colSpan: 4, rowSpan: 1 },
+    { type: 'journal', col: 3, row: 3, colSpan: 2, rowSpan: 2 },
+    { type: 'connections', col: 1, row: 4, colSpan: 2, rowSpan: 2 },
   ]},
+  // Center Spotlight: one dominant panel, side rails
   { id: 'center-spotlight', name: 'Center Spotlight', cols: 5, rows: 4, elements: [
-    { type: 'cpu', col: 1, row: 1, colSpan: 1, rowSpan: 3 },
-    { type: 'nowplaying', col: 2, row: 1, colSpan: 3, rowSpan: 3 },
+    { type: 'journal', col: 2, row: 1, colSpan: 3, rowSpan: 3 },
+    { type: 'cpu', col: 1, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'temps', col: 1, row: 2, colSpan: 1, rowSpan: 2 },
     { type: 'gpu', col: 5, row: 1, colSpan: 1, rowSpan: 1 },
-    { type: 'temps', col: 5, row: 2, colSpan: 1, rowSpan: 1 },
+    { type: 'memory', col: 5, row: 2, colSpan: 1, rowSpan: 1 },
     { type: 'network', col: 5, row: 3, colSpan: 1, rowSpan: 1 },
-    { type: 'disks', col: 1, row: 4, colSpan: 5, rowSpan: 1 },
+    { type: 'connections', col: 1, row: 4, colSpan: 5, rowSpan: 1 },
   ]},
+  // Tabbed Workspace: grouped by category
   { id: 'tabbed-workspace', name: 'Tabbed Workspace', cols: 4, rows: 4, elements: [
     { type: 'cpu', col: 1, row: 1, colSpan: 2, rowSpan: 1 },
     { type: 'gpu', col: 3, row: 1, colSpan: 2, rowSpan: 1 },
     { type: 'memory', col: 1, row: 2, colSpan: 1, rowSpan: 2 },
     { type: 'network', col: 2, row: 2, colSpan: 1, rowSpan: 2 },
-    { type: 'temps', col: 3, row: 2, colSpan: 2, rowSpan: 1 },
-    { type: 'disks', col: 3, row: 3, colSpan: 2, rowSpan: 1 },
-    { type: 'nowplaying', col: 1, row: 4, colSpan: 4, rowSpan: 1 },
+    { type: 'journal', col: 3, row: 2, colSpan: 2, rowSpan: 1 },
+    { type: 'connections', col: 3, row: 3, colSpan: 2, rowSpan: 1 },
+    { type: 'temps', col: 1, row: 4, colSpan: 4, rowSpan: 1 },
   ]},
+  // Timeline Board: center event stream, side context
   { id: 'timeline-board', name: 'Timeline Board', cols: 5, rows: 4, elements: [
-    { type: 'journal', col: 1, row: 1, colSpan: 3, rowSpan: 3 },
-    { type: 'cpu', col: 4, row: 1, colSpan: 2, rowSpan: 1 },
-    { type: 'gpu', col: 4, row: 2, colSpan: 2, rowSpan: 1 },
-    { type: 'connections', col: 4, row: 3, colSpan: 2, rowSpan: 1 },
-    { type: 'disks', col: 1, row: 4, colSpan: 5, rowSpan: 1 },
+    { type: 'journal', col: 2, row: 1, colSpan: 2, rowSpan: 3 },
+    { type: 'cpu', col: 1, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'temps', col: 1, row: 2, colSpan: 1, rowSpan: 2 },
+    { type: 'gpu', col: 4, row: 1, colSpan: 2, rowSpan: 1 },
+    { type: 'memory', col: 4, row: 2, colSpan: 2, rowSpan: 1 },
+    { type: 'network', col: 4, row: 3, colSpan: 2, rowSpan: 1 },
+    { type: 'connections', col: 1, row: 4, colSpan: 5, rowSpan: 1 },
   ]},
+  // Two-Column: wide analysis + narrow rail
   { id: 'two-column', name: 'Two-Column', cols: 4, rows: 5, elements: [
     { type: 'cpu', col: 1, row: 1, colSpan: 3, rowSpan: 1 },
     { type: 'gpu', col: 1, row: 2, colSpan: 3, rowSpan: 1 },
-    { type: 'memory', col: 1, row: 3, colSpan: 3, rowSpan: 1 },
-    { type: 'nowplaying', col: 1, row: 4, colSpan: 3, rowSpan: 1 },
-    { type: 'disks', col: 1, row: 5, colSpan: 3, rowSpan: 1 },
-    { type: 'temps', col: 4, row: 1, colSpan: 1, rowSpan: 2 },
-    { type: 'network', col: 4, row: 3, colSpan: 1, rowSpan: 1 },
-    { type: 'uptime', col: 4, row: 4, colSpan: 1, rowSpan: 2 },
+    { type: 'journal', col: 1, row: 3, colSpan: 3, rowSpan: 2 },
+    { type: 'connections', col: 1, row: 5, colSpan: 3, rowSpan: 1 },
+    { type: 'memory', col: 4, row: 1, colSpan: 1, rowSpan: 1 },
+    { type: 'network', col: 4, row: 2, colSpan: 1, rowSpan: 1 },
+    { type: 'temps', col: 4, row: 3, colSpan: 1, rowSpan: 3 },
   ]},
 ];
+
+// Deep copy of presets for reset reference
+const DEFAULT_PRESETS = JSON.parse(JSON.stringify(PRESETS));
 
 let state = {
   cols: 4, rows: 6,
@@ -90,10 +103,57 @@ let state = {
   selectedId: null,
   activePreset: 'center-spotlight',
 };
+const STORAGE_KEY = 'ddash-editor-layouts';
 let undoStack = [];
 let redoStack = [];
 let nextId = 1;
 let dragState = null;
+
+// ── localStorage persistence ──────────────────────────────────────────────
+function saveLayouts() {
+  const data = {};
+  for (const preset of PRESETS) {
+    data[preset.id] = { cols: preset.cols, rows: preset.rows, elements: preset.elements };
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function loadLayouts() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    for (const preset of PRESETS) {
+      if (data[preset.id]) {
+        preset.cols = data[preset.id].cols;
+        preset.rows = data[preset.id].rows;
+        preset.elements = data[preset.id].elements;
+      }
+    }
+  } catch(e) {}
+}
+
+function resetLayout(presetId) {
+  const def = DEFAULT_PRESETS.find(p => p.id === presetId);
+  const live = PRESETS.find(p => p.id === presetId);
+  if (!def || !live) return;
+  live.cols = def.cols;
+  live.rows = def.rows;
+  live.elements = JSON.parse(JSON.stringify(def.elements));
+  saveLayouts();
+}
+
+function resetAllLayouts() {
+  for (const def of DEFAULT_PRESETS) {
+    const live = PRESETS.find(p => p.id === def.id);
+    if (live) {
+      live.cols = def.cols;
+      live.rows = def.rows;
+      live.elements = JSON.parse(JSON.stringify(def.elements));
+    }
+  }
+  saveLayouts();
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UNDO / REDO
@@ -309,6 +369,7 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mouseup', () => {
   if (dragState) {
     dragState = null;
+    saveCurrentPreset();
   }
 });
 
@@ -390,6 +451,7 @@ function renderProps() {
         el.label = info?.label || el.type;
       }
       render();
+      saveCurrentPreset();
     });
   };
 
@@ -408,6 +470,7 @@ function renderProps() {
       state.elements = state.elements.filter(x => x.id !== el.id);
       state.selectedId = null;
       render();
+      saveCurrentPreset();
     });
   }
 }
@@ -475,6 +538,7 @@ function initPalette() {
         pushUndo();
         state.elements.push(el);
         selectElement(el.id);
+        saveCurrentPreset();
       }
     } catch(err) {}
   });
@@ -496,6 +560,18 @@ function loadPreset(id) {
   $('grid-rows').value = state.rows;
   renderPresetTabs();
   render();
+}
+
+function saveCurrentPreset() {
+  const preset = PRESETS.find(p => p.id === state.activePreset);
+  if (!preset) return;
+  preset.cols = state.cols;
+  preset.rows = state.rows;
+  preset.elements = state.elements.map(e => ({
+    type: e.type, col: e.col, row: e.row,
+    colSpan: e.colSpan, rowSpan: e.rowSpan,
+  }));
+  saveLayouts();
 }
 
 function renderPresetTabs() {
@@ -585,6 +661,7 @@ function showPreview() {
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 function init() {
+  loadLayouts(); // Load saved layouts from localStorage
   initPalette();
   renderPresetTabs();
   loadPreset('center-spotlight');
@@ -610,10 +687,10 @@ function init() {
     render();
   });
 
-  $('btn-add-row').addEventListener('click', () => { pushUndo(); state.rows++; $('grid-rows').value = state.rows; render(); });
-  $('btn-add-col').addEventListener('click', () => { pushUndo(); state.cols++; $('grid-cols').value = state.cols; render(); });
+  $('btn-add-row').addEventListener('click', () => { pushUndo(); state.rows++; $('grid-rows').value = state.rows; render(); saveCurrentPreset(); });
+  $('btn-add-col').addEventListener('click', () => { pushUndo(); state.cols++; $('grid-cols').value = state.cols; render(); saveCurrentPreset(); });
   $('btn-clear').addEventListener('click', () => {
-    if (confirm('Clear all elements?')) { pushUndo(); state.elements = []; state.selectedId = null; render(); }
+    if (confirm('Clear all elements?')) { pushUndo(); state.elements = []; state.selectedId = null; render(); saveCurrentPreset(); }
   });
 
   // Undo / Redo
@@ -634,6 +711,27 @@ function init() {
   $('btn-save').addEventListener('click', saveJSON);
   $('btn-load').addEventListener('click', () => $('file-input').click());
   $('file-input').addEventListener('change', e => { if (e.target.files[0]) loadJSON(e.target.files[0]); });
+
+  // Reset with confirmation
+  $('btn-reset').addEventListener('click', () => {
+    const preset = PRESETS.find(p => p.id === state.activePreset);
+    const name = preset?.name || 'this layout';
+    const choice = confirm(
+      `Reset "${name}" to default?\n\nOK = Reset this layout only\nCancel = No change`
+    );
+    if (!choice) return;
+    // Second prompt: reset just this one or all?
+    const allChoice = confirm(
+      `Also reset ALL other layouts to default?\n\nOK = Reset ALL layouts\nCancel = Reset only "${name}"`
+    );
+    pushUndo();
+    if (allChoice) {
+      resetAllLayouts();
+    } else {
+      resetLayout(state.activePreset);
+    }
+    loadPreset(state.activePreset);
+  });
 
   // Preview
   $('btn-preview').addEventListener('click', showPreview);
