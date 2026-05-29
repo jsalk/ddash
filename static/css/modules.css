@@ -1,0 +1,64 @@
+/* ── module-specific styles ───────────────────────────────────────────── */
+
+/* temps — bar graph */
+.temp-bar { display: flex; align-items: center; gap: 6px; margin: 1px 0; }
+.temp-bar .name { font-size: 9px; color: var(--text-dim); width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.temp-bar .track { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.temp-bar .fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+.temp-bar .val { font-size: 9px; width: 32px; text-align: right; flex-shrink: 0; }
+
+/* now playing */
+.np-source { font-size: 10px; color: var(--accent); margin-bottom: 2px; }
+.np-title { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-artist { font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.np-progress { margin-top: 4px; }
+.np-time { font-size: 9px; color: var(--text-dim); display: flex; justify-content: space-between; margin-top: 2px; }
+.np-idle { color: var(--text-muted); font-style: italic; font-size: 10px; }
+
+/* disk */
+.disk-item { margin: 2px 0; }
+.disk-mount { font-size: 10px; color: var(--text); margin-bottom: 1px; }
+.disk-info { font-size: 9px; color: var(--text-dim); display: flex; justify-content: space-between; }
+
+/* network */
+.net-rate { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.net-rate i { color: var(--green); width: 12px; text-align: center; }
+.net-rate i.up { color: var(--orange); }
+.net-totals { font-size: 9px; color: var(--text-dim); margin-top: 4px; }
+
+/* docker chips */
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; font-size: 9px; background: var(--surface2); border: 1px solid var(--border); margin: 1px; }
+.chip .dot { width: 5px; height: 5px; border-radius: 50%; }
+.chip .dot.up { background: var(--green); }
+.chip .dot.down { background: var(--red); }
+
+/* journal / connections tail */
+.tail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.tail-status { font-size: 8px; }
+.tail-status.live { color: var(--green); }
+.tail-status.paused { color: var(--yellow); }
+.tail-entry { white-space: pre; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--border); padding: 1px 0; font-size: 10px; line-height: 1.4; }
+.tail-entry .ts { color: var(--text-dim); }
+.tail-entry .err { color: var(--red); font-weight: 700; }
+.tail-entry .warn { color: var(--yellow); }
+.tail-entry .est { color: var(--green); }
+.tail-entry .close { color: var(--red); font-weight: 700; }
+
+/* uptime overlay */
+.uptime-overlay { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.6); border-radius: 4px; padding: 4px 8px; font-size: 9px; line-height: 1.5; }
+
+/* interfaces */
+.iface-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-bottom: 1px solid var(--border); }
+.iface-led { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.iface-led.up { background: var(--green); }
+.iface-led.down { background: var(--red); }
+.iface-name { font-size: 10px; color: var(--text); min-width: 60px; }
+.iface-ip { font-size: 9px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.iface-speed { font-size: 9px; color: var(--text-dim); }
+
+/* connections */
+.conn-proto { display: inline-block; width: 30px; font-size: 9px; color: var(--text-dim); }
+.conn-addr { font-size: 10px; color: var(--text); }
+.conn-status { font-size: 9px; }
+.conn-status.est { color: var(--green); }
+.conn-status.other { color: var(--text-dim); }

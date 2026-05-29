@@ -1,0 +1,67 @@
+/* ── ddash v2.0 — base styles ─────────────────────────────────────────── */
+:root {
+  --bg: #0a0e14; --surface: #111820; --surface2: #161d27; --border: #1c2530;
+  --text: #e2e8f0; --text-dim: #64748b; --text-muted: #475569;
+  --accent: #38bdf8; --green: #34d399; --yellow: #fbbf24; --red: #f87171;
+  --orange: #fb923c; --purple: #a78bfa; --cyan: #22d3ee; --pink: #f472b6;
+  --radius: 8px; --font: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); font-size: 12px; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── header ──────────────────────────────────────────────────────────── */
+.header { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px; background: var(--surface); border-bottom: 1px solid var(--border); height: 36px; flex-shrink: 0; gap: 16px; z-index: 10; }
+.header-left, .header-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.header-center { flex-shrink: 0; }
+.header-brand { font-size: 14px; font-weight: 700; letter-spacing: 3px; color: var(--accent); }
+.header-weather { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.header-uptime { font-size: 10px; color: var(--text-dim); }
+.header-clock { font-size: 14px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ── dashboard grid ──────────────────────────────────────────────────── */
+.dashboard { flex: 1; display: grid; gap: 1px; background: var(--border); overflow: hidden; }
+.module { background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+.module-head { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); padding: 6px 10px 4px; display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.module-head i { font-size: 10px; color: var(--accent); }
+.module-body { flex: 1; padding: 0 10px 6px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+
+/* ── bars ────────────────────────────────────────────────────────────── */
+.bar-track { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.bar-fill.green { background: var(--green); }
+.bar-fill.yellow { background: var(--yellow); }
+.bar-fill.red { background: var(--red); }
+.bar-fill.accent { background: var(--accent); }
+.bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin: 3px 0 1px; }
+.bar-label .val { color: var(--text); }
+
+/* ── gauge ring ──────────────────────────────────────────────────────── */
+.gauge-ring { width: 64px; height: 64px; flex-shrink: 0; }
+.gauge-bg { fill: none; stroke: var(--surface2); stroke-width: 3; }
+.gauge-fill { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; transform: rotate(-90deg); transform-origin: center; }
+.gauge-text { font-size: 16px; font-weight: 700; fill: var(--text); text-anchor: middle; dominant-baseline: central; }
+.gauge-row { display: flex; align-items: center; gap: 12px; }
+.gauge-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.gauge-info .mrow { display: flex; justify-content: space-between; font-size: 10px; }
+.gauge-info .ml { color: var(--text-dim); }
+.gauge-info .mv { color: var(--text); }
+
+/* ── data rows ───────────────────────────────────────────────────────── */
+.mrow { display: flex; justify-content: space-between; padding: 1px 0; font-size: 10px; }
+.mrow .ml { color: var(--text-dim); }
+.mrow .mv { color: var(--text); }
+.sub-title { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin: 4px 0 2px; display: flex; align-items: center; gap: 4px; }
+.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+
+/* ── scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--surface2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── responsive ──────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .header { padding: 4px 10px; height: 32px; }
+  .header-brand { font-size: 11px; letter-spacing: 2px; }
+  .module { min-height: 100px; }
+}
