@@ -15,8 +15,7 @@ const $ = id => document.getElementById(id);
 const SK = 'ddash-v2';
 const S = Object.assign({
   layout: 'center-spotlight',
-  modules: { cpu: 'stage', gpu: 'left', memory: 'right', network: 'bottom',
-             temps: 'left', uptime: 'right', disks: 'bottom', nowplaying: 'stage' },
+  modules: {},  // Auto-populated from layout slots on first load
   refresh: 2,
   theme: 'default',
   tempUnit: 'F',
@@ -27,6 +26,7 @@ function save() { localStorage.setItem(SK, JSON.stringify(S)); }
 let layouts = [];
 let moduleData = {};
 let sseSource = null;
+const MODULE_IDS = ['cpu','gpu','memory','network','temps','nowplaying','disks','docker','journal','connections','uptime','ifaces'];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAYOUT ENGINE
@@ -39,6 +39,16 @@ function renderLayout() {
   grid.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
   grid.style.gridTemplateRows = `repeat(${Math.max(...layout.slots.map(s => s.row + s.rowSpan))}, 1fr)`;
   grid.innerHTML = '';
+
+  // Auto-populate modules from layout slots if empty
+  if (Object.keys(S.modules).length === 0) {
+    for (const slot of layout.slots) {
+      if (MODULE_IDS.includes(slot.id) && !Object.values(S.modules).includes(slot.id)) {
+        S.modules[slot.id] = slot.id;
+      }
+    }
+    save();
+  }
 
   for (const slot of layout.slots) {
     const div = document.createElement('div');
@@ -326,8 +336,10 @@ function initMenu() {
   $('opt-clock').addEventListener('change', e => { S.clock24 = e.target.value === '24'; save(); updateHeader(); });
 
   // Module assignment arrows
-  $('mod-add').addEventListener('click', () => assignSelected(true));
-  $('mod-remove').addEventListener('click', () => assignSelected(false));
+  // > moves from Assigned to Available (unassign)
+  // < moves from Available to Assigned (assign)
+  $('mod-add').addEventListener('click', () => assignSelected(false));
+  $('mod-remove').addEventListener('click', () => assignSelected(true));
 
   applyTheme();
 }
