@@ -20,6 +20,7 @@ const S = Object.assign({
   theme: 'default',
   tempUnit: 'F',
   clock24: true,
+  liteEdit: false,
 }, JSON.parse(localStorage.getItem(SK) || '{}'));
 function save() { localStorage.setItem(SK, JSON.stringify(S)); }
 
@@ -64,8 +65,16 @@ function renderLayout() {
     if (modId) {
       const isTail = TAIL_MODULES.has(modId);
       const scrollClass = isTail ? ' scrollable' : '';
+      let headContent;
+      if (S.liteEdit) {
+        // Lite edit: dropdown to select module type
+        const opts = MODULE_IDS.map(id => `<option value="${id}" ${id === modId ? 'selected' : ''}>${getModuleTitle(id)}</option>`).join('');
+        headContent = `<i class="fas ${getModuleIcon(modId)}"></i><select class="mod-select" data-slot="${slot.id}">${opts}</select>`;
+      } else {
+        headContent = `<i class="fas ${getModuleIcon(modId)}"></i> ${getModuleTitle(modId)}`;
+      }
       div.innerHTML = `
-        <div class="module-head"><i class="fas ${getModuleIcon(modId)}"></i> ${getModuleTitle(modId)}</div>
+        <div class="module-head">${headContent}</div>
         <div class="module-body${scrollClass}" id="body-${slot.id}"></div>
         ${isTail ? `<div class="module-tail">
           <span class="tail-status live" id="tail-status-${modId}">● LIVE</span>
@@ -485,6 +494,33 @@ function initMenu() {
   $('opt-theme').addEventListener('change', e => { S.theme = e.target.value; save(); applyTheme(); });
   $('opt-temp').addEventListener('change', e => { S.tempUnit = e.target.value; save(); renderModules(); });
   $('opt-clock').addEventListener('change', e => { S.clock24 = e.target.value === '24'; save(); updateHeader(); });
+
+  // Lite edit toggle
+  const liteEditEl = $('opt-lite-edit');
+  if (S.liteEdit) liteEditEl.classList.add('on');
+  liteEditEl.addEventListener('click', () => {
+    S.liteEdit = !S.liteEdit;
+    liteEditEl.classList.toggle('on', S.liteEdit);
+    document.body.classList.toggle('lite-edit', S.liteEdit);
+    save();
+    renderLayout();
+  });
+  document.body.classList.toggle('lite-edit', S.liteEdit);
+
+  // Wire dropdown changes (delegated)
+  $('dashboard').addEventListener('change', e => {
+    if (e.target.classList.contains('mod-select')) {
+      const slotId = e.target.dataset.slot;
+      const newModId = e.target.value;
+      // Remove old assignment for this module
+      const oldModId = Object.entries(S.modules).find(([_, s]) => s === slotId)?.[0];
+      if (oldModId) delete S.modules[oldModId];
+      // Assign new module to slot
+      S.modules[newModId] = slotId;
+      save();
+      renderLayout();
+    }
+  });
 
   // Module assignment arrows
   // > moves from Assigned to Available (unassign)

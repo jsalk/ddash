@@ -24,6 +24,10 @@ body { font-family: var(--font); font-size: 12px; background: var(--bg); color: 
 .module { background: var(--surface); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 .module-head { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); padding: 6px 10px 4px; display: flex; align-items: center; gap: 5px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
 .module-head i { font-size: 10px; color: var(--accent); }
+.module-head .mod-select { background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 9px; padding: 1px 4px; border-radius: 3px; max-width: 120px; }
+.module-head .mod-select:focus { border-color: var(--accent); outline: none; }
+body.lite-edit .module { border: 1px solid transparent; transition: border-color 0.15s; }
+body.lite-edit .module:hover { border-color: var(--accent); }
 .module-body { flex: 1; padding: 0 10px 6px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
 .module-body.scrollable { overflow-y: auto; }
 .module-tail { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
