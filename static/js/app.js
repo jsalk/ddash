@@ -199,10 +199,22 @@ function processTailData(modId, entries, keyFn) {
     return;
   }
 
-  // Live: render directly
-  t.seen.clear();
-  body.innerHTML = renderers[modId]({ entries, connections: entries });
-  body.scrollTo({ top: body.scrollHeight });
+  // Live: append only NEW entries (don't rebuild DOM)
+  let appended = 0;
+  for (const entry of entries) {
+    const k = keyFn(entry);
+    if (!t.seen.has(k)) {
+      t.seen.add(k);
+      body.insertAdjacentHTML('beforeend', renderers[modId]({ entries: [entry] }));
+      appended++;
+    }
+  }
+  // Trim to 200 entries max
+  while (body.children.length > 200) body.removeChild(body.firstChild);
+  // Auto-scroll if we added something
+  if (appended > 0) {
+    body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+  }
   t.buffer = [];
 }
 
