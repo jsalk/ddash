@@ -270,9 +270,18 @@ const renderers = {
   },
 
   network(d) {
+    const maxRate = Math.max(d.rx_rate || 0, d.tx_rate || 0, 1000);
+    const rxPct = Math.min(100, ((d.rx_rate || 0) / maxRate) * 100);
+    const txPct = Math.min(100, ((d.tx_rate || 0) / maxRate) * 100);
     return `
-      <div class="net-rate"><i class="fas fa-arrow-down"></i><span>${fmtRate(d.rx_rate)}</span></div>
-      <div class="net-rate"><i class="fas fa-arrow-up up"></i><span>${fmtRate(d.tx_rate)}</span></div>
+      <div style="margin-bottom:6px">
+        <div class="bar-label"><span style="color:var(--green)">↓ Download</span><span class="val">${fmtRate(d.rx_rate)}</span></div>
+        <div class="bar-track"><div class="bar-fill green" style="width:${rxPct}%"></div></div>
+      </div>
+      <div style="margin-bottom:6px">
+        <div class="bar-label"><span style="color:var(--orange)">↑ Upload</span><span class="val">${fmtRate(d.tx_rate)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${txPct}%;background:var(--orange)"></div></div>
+      </div>
       <div class="net-totals">RX: ${fmtBytes(d.rx_total)} · TX: ${fmtBytes(d.tx_total)}</div>`;
   },
 
