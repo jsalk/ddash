@@ -92,6 +92,8 @@ const PRESETS = [
     { type: 'network', col: 4, row: 2, colSpan: 1, rowSpan: 1 },
     { type: 'temps', col: 4, row: 3, colSpan: 1, rowSpan: 3 },
   ]},
+  // Custom: empty canvas for user-defined layout
+  { id: 'custom', name: 'Custom', cols: 4, rows: 4, elements: [] },
 ];
 
 // Deep copy of presets for reset reference
@@ -204,6 +206,7 @@ function createElement(type, col, row, colSpan = 2, rowSpan = 1) {
     col, row, colSpan, rowSpan,
     isModule,
     content: type === 'text' ? 'Text block' : '',
+    depth: 0, // z-index ordering
   };
 }
 
@@ -217,6 +220,8 @@ function getElementAt(col, row) {
 function wouldOverlap(el, excludeId = null) {
   for (const other of state.elements) {
     if (other.id === excludeId) continue;
+    // Allow overlap if either element has depth > 0
+    if ((el.depth || 0) > 0 || (other.depth || 0) > 0) continue;
     if (el.col < other.col + other.colSpan &&
         el.col + el.colSpan > other.col &&
         el.row < other.row + other.rowSpan &&
@@ -253,7 +258,7 @@ function render() {
     else bodyContent = ''; // separator has its own styling
 
     return `<div class="ce${sel}${mod}${typeClass}" data-id="${el.id}"
-      style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan}">
+      style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan};z-index:${(el.depth || 0) + 1}">
       <div class="ce-head">
         <span class="ce-label">${el.label}</span>
         <span class="ce-type">${el.isModule ? 'module' : el.type}</span>
@@ -265,22 +270,19 @@ function render() {
     </div>`;
   }).join('');
 
-  // Wire element interactions
+  // Wire element interactions — combined select + move
   canvas.querySelectorAll('.ce').forEach(el => {
     const id = parseInt(el.dataset.id);
 
-    // Select on click
     el.addEventListener('mousedown', e => {
-      if (e.target.classList.contains('resize-handle')) return;
-      e.stopPropagation();
-      selectElement(id);
-    });
-
-    // Drag to move
-    el.addEventListener('mousedown', e => {
-      if (e.target.classList.contains('resize-handle')) return;
+      // Ignore clicks on resize handles
+      if (e.target.closest('.resize-handle')) return;
       if (e.button !== 0) return;
       e.preventDefault();
+      e.stopPropagation();
+
+      selectElement(id);
+
       const elem = state.elements.find(x => x.id === id);
       if (!elem) return;
       pushUndo();
@@ -291,8 +293,6 @@ function render() {
         startRow: elem.row,
         startMouseX: e.clientX,
         startMouseY: e.clientY,
-        origColSpan: elem.colSpan,
-        origRowSpan: elem.rowSpan,
       };
     });
   });
@@ -352,8 +352,14 @@ document.addEventListener('mousemove', e => {
   if (!elem) return;
 
   if (dragState.type === 'move') {
-    elem.col = Math.max(1, Math.min(state.cols - elem.colSpan + 1, dragState.startCol + dcol));
-    elem.row = Math.max(1, Math.min(state.rows - elem.rowSpan + 1, dragState.startRow + drow));
+    const newCol = Math.max(1, Math.min(state.cols - elem.colSpan + 1, dragState.startCol + dcol));
+    const newRow = Math.max(1, Math.min(state.rows - elem.rowSpan + 1, dragState.startRow + drow));
+    // Check overlap before applying
+    const testEl = { ...elem, col: newCol, row: newRow };
+    if (!wouldOverlap(testEl, elem.id)) {
+      elem.col = newCol;
+      elem.row = newRow;
+    }
   } else if (dragState.type === 'resize') {
     const dir = dragState.dir;
     if (dir.includes('e')) {
@@ -430,6 +436,14 @@ function renderProps() {
       <textarea class="props-input" id="prop-content" rows="3">${el.content}</textarea></div>`;
   }
 
+  // Depth (z-order)
+  html += `<div class="props-row"><label class="props-label">Depth (z-order)</label>
+    <div class="props-row-inline">
+      <button class="ct-btn" id="depth-down" title="Send backward">⬇ Back</button>
+      <span style="font-size:11px;min-width:20px;text-align:center">${el.depth || 0}</span>
+      <button class="ct-btn" id="depth-up" title="Bring forward">⬆ Front</button>
+    </div></div>`;
+
   // Delete button
   html += `<button class="ct-btn" id="prop-delete" style="color:var(--danger);margin-top:8px;width:100%;justify-content:center">
     <i class="fas fa-trash"></i> Delete Element</button>`;
@@ -469,6 +483,26 @@ function renderProps() {
       pushUndo();
       state.elements = state.elements.filter(x => x.id !== el.id);
       state.selectedId = null;
+      render();
+      saveCurrentPreset();
+    });
+  }
+
+  // Depth controls
+  const depthUp = $('depth-up');
+  const depthDown = $('depth-down');
+  if (depthUp) {
+    depthUp.addEventListener('click', () => {
+      pushUndo();
+      el.depth = (el.depth || 0) + 1;
+      render();
+      saveCurrentPreset();
+    });
+  }
+  if (depthDown) {
+    depthDown.addEventListener('click', () => {
+      pushUndo();
+      el.depth = Math.max(0, (el.depth || 0) - 1);
       render();
       saveCurrentPreset();
     });
@@ -596,7 +630,7 @@ function saveJSON() {
     rows: state.rows,
     elements: state.elements.map(e => ({
       type: e.type, label: e.label, col: e.col, row: e.row,
-      colSpan: e.colSpan, rowSpan: e.rowSpan, content: e.content,
+      colSpan: e.colSpan, rowSpan: e.rowSpan, content: e.content, depth: e.depth || 0,
     })),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -616,7 +650,13 @@ function loadJSON(file) {
       pushUndo();
       state.cols = data.cols || 4;
       state.rows = data.rows || 6;
-      state.elements = (data.elements || []).map(e => createElement(e.type, e.col, e.row, e.colSpan, e.rowSpan));
+      state.elements = (data.elements || []).map(e => {
+        const el = createElement(e.type, e.col, e.row, e.colSpan, e.rowSpan);
+        el.depth = e.depth || 0;
+        el.content = e.content || '';
+        el.label = e.label || el.label;
+        return el;
+      });
       $('layout-name').value = data.name || 'Untitled';
       $('layout-desc').value = data.description || '';
       $('grid-cols').value = state.cols;
@@ -689,6 +729,19 @@ function init() {
 
   $('btn-add-row').addEventListener('click', () => { pushUndo(); state.rows++; $('grid-rows').value = state.rows; render(); saveCurrentPreset(); });
   $('btn-add-col').addEventListener('click', () => { pushUndo(); state.cols++; $('grid-cols').value = state.cols; render(); saveCurrentPreset(); });
+  $('btn-return-default').addEventListener('click', () => {
+    const def = DEFAULT_PRESETS.find(p => p.id === state.activePreset);
+    if (!def) return;
+    if (!confirm(`Return "${PRESETS.find(p => p.id === state.activePreset)?.name}" to its default layout?`)) return;
+    pushUndo();
+    state.cols = def.cols;
+    state.rows = def.rows;
+    state.elements = JSON.parse(JSON.stringify(def.elements)).map(e => createElement(e.type, e.col, e.row, e.colSpan, e.rowSpan));
+    $('grid-cols').value = state.cols;
+    $('grid-rows').value = state.rows;
+    saveCurrentPreset();
+    render();
+  });
   $('btn-clear').addEventListener('click', () => {
     if (confirm('Clear all elements?')) { pushUndo(); state.elements = []; state.selectedId = null; render(); saveCurrentPreset(); }
   });
