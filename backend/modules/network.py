@@ -27,12 +27,19 @@ def collect_connections() -> dict:
     conns = []
     for c in psutil.net_connections(kind="inet"):
         try:
+            proc_name = ""
+            if c.pid:
+                try:
+                    proc_name = psutil.Process(c.pid).name()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    proc_name = f"pid:{c.pid}"
             conns.append({
                 "time": ts,
                 "proto": "TCP" if c.type == 1 else "UDP",
                 "laddr": f"{c.laddr.ip}:{c.laddr.port}" if c.laddr else "--",
                 "raddr": f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "--",
                 "status": c.status or "--",
+                "process": proc_name,
             })
         except Exception:
             pass

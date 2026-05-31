@@ -376,7 +376,8 @@ const renderers = {
     if (!d?.connections?.length) return '<div style="color:var(--text-muted)">No connections</div>';
     return d.connections.map(c => {
       const cls = c.status === 'ESTABLISHED' ? 'est' : 'other';
-      return `<div class="tail-entry"><span class="ts">${c.time || ''}</span> <span class="conn-status ${cls}">${c.status.substring(0,4)}</span> <span class="conn-proto">${c.proto}</span> <span class="conn-addr">${c.raddr}</span></div>`;
+      const proc = c.process ? ` <span style="color:var(--accent)">${c.process}</span>` : '';
+      return `<div class="tail-entry"><span class="ts">${c.time || ''}</span> <span class="conn-status ${cls}">${c.status.substring(0,4)}</span> <span class="conn-proto">${c.proto}</span> <span class="conn-addr">${c.raddr}</span>${proc}</div>`;
     }).join('');
   },
 };
