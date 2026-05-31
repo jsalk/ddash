@@ -35,3 +35,5 @@
 .layout-card.active { border-color: var(--green); background: rgba(52,211,153,0.08); }
 .layout-card .lc-name { font-size: 11px; color: var(--text); }
 .layout-card .lc-desc { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+.menu-link { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-top: 6px; border-radius: 6px; font-size: 11px; color: var(--accent); background: var(--surface2); border: 1px solid var(--border); text-decoration: none; transition: all 0.15s; }
+.menu-link:hover { border-color: var(--accent); background: var(--primary-hl); }
