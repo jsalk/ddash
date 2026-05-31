@@ -19,12 +19,17 @@ body { font-family: var(--font); font-size: 12px; background: var(--bg); color: 
 .header-uptime { font-size: 10px; color: var(--text-dim); }
 .header-clock { font-size: 14px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 
-/* ── dashboard grid ──────────────────────────────────────────────────── */
+/* ── module grid ──────────────────────────────────────────────────── */
 .dashboard { flex: 1; display: grid; gap: 1px; background: var(--border); overflow: hidden; }
-.module { background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
-.module-head { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); padding: 6px 10px 4px; display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+.module { background: var(--surface); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.module-head { font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); padding: 6px 10px 4px; display: flex; align-items: center; gap: 5px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
 .module-head i { font-size: 10px; color: var(--accent); }
 .module-body { flex: 1; padding: 0 10px 6px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+.module-body.scrollable { overflow-y: auto; }
+.module-tail { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.tail-btn { background: none; border: 1px solid var(--border); color: var(--text-dim); font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 3px; transition: all 0.15s; }
+.tail-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tail-btn.active { border-color: var(--green); color: var(--green); }
 
 /* ── bars ────────────────────────────────────────────────────────────── */
 .bar-track { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }

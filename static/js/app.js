@@ -27,6 +27,8 @@ let layouts = [];
 let moduleData = {};
 let sseSource = null;
 const MODULE_IDS = ['cpu','gpu','memory','network','temps','nowplaying','disks','docker','journal','connections','uptime','ifaces'];
+const TAIL_MODULES = new Set(['journal', 'connections']);
+const tailState = {}; // { modId: { paused: bool, buffer: [], seen: Set, replaying: bool } }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAYOUT ENGINE
@@ -60,14 +62,28 @@ function renderLayout() {
     // Find which module is assigned to this slot
     const modId = Object.entries(S.modules).find(([_, s]) => s === slot.id)?.[0];
     if (modId) {
+      const isTail = TAIL_MODULES.has(modId);
+      const scrollClass = isTail ? ' scrollable' : '';
       div.innerHTML = `
         <div class="module-head"><i class="fas ${getModuleIcon(modId)}"></i> ${getModuleTitle(modId)}</div>
-        <div class="module-body" id="body-${slot.id}"></div>`;
+        <div class="module-body${scrollClass}" id="body-${slot.id}"></div>
+        ${isTail ? `<div class="module-tail">
+          <span class="tail-status live" id="tail-status-${modId}">● LIVE</span>
+          <button class="tail-btn" id="tail-btn-${modId}" data-mod="${modId}"><i class="fas fa-pause"></i> Pause</button>
+        </div>` : ''}`;
     } else {
       div.innerHTML = `<div class="module-head" style="color:var(--text-muted)">Empty slot</div>
         <div class="module-body" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:10px">—</div>`;
     }
     grid.appendChild(div);
+  }
+
+  // Wire tail toggle buttons
+  for (const modId of TAIL_MODULES) {
+    const btn = $(`tail-btn-${modId}`);
+    if (btn) {
+      btn.addEventListener('click', () => toggleTailPause(modId));
+    }
   }
 
   // Update header
@@ -88,6 +104,106 @@ function getModuleTitle(id) {
     nowplaying:'Now Playing', disks:'Disks', docker:'Docker', journal:'Journal',
     connections:'Connections', uptime:'Uptime / Load', ifaces:'Interfaces' };
   return titles[id] || id;
+}
+
+// ── Tail state management (journal, connections) ────────────────────────
+function initTail(modId) {
+  if (!tailState[modId]) {
+    tailState[modId] = { paused: false, buffer: [], seen: new Set(), replaying: false };
+  }
+}
+
+function toggleTailPause(modId) {
+  initTail(modId);
+  const t = tailState[modId];
+  t.paused = !t.paused;
+
+  // Update button
+  const btn = $(`tail-btn-${modId}`);
+  const status = $(`tail-status-${modId}`);
+  if (btn) {
+    btn.innerHTML = t.paused ? '<i class="fas fa-play"></i> Resume' : '<i class="fas fa-pause"></i> Pause';
+    btn.classList.toggle('active', t.paused);
+  }
+  if (status) {
+    status.textContent = t.paused ? '● PAUSED' : '● LIVE';
+    status.className = `tail-status ${t.paused ? 'paused' : 'live'}`;
+  }
+
+  // If unpausing and buffer has items, start replay
+  if (!t.paused && t.buffer.length > 0 && !t.replaying) {
+    replayTail(modId);
+  }
+}
+
+function replayTail(modId) {
+  initTail(modId);
+  const t = tailState[modId];
+  t.replaying = true;
+
+  const body = findTailBody(modId);
+  if (!body || t.buffer.length === 0) { t.replaying = false; return; }
+
+  // Append next buffered entry
+  const html = t.buffer.shift();
+  body.insertAdjacentHTML('beforeend', html);
+
+  // Trim to 200 entries max
+  while (body.children.length > 200) body.removeChild(body.firstChild);
+
+  // Smooth scroll to bottom
+  body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+
+  // Continue replay or finish
+  if (t.buffer.length > 0 && !t.paused) {
+    setTimeout(() => replayTail(modId), 80); // ~12 entries/sec
+  } else {
+    t.replaying = false;
+  }
+}
+
+function findTailBody(modId) {
+  // Find the slot this module is assigned to
+  const slotId = Object.entries(S.modules).find(([mid]) => mid === modId)?.[1];
+  if (!slotId) return null;
+  return $(`body-${slotId}`);
+}
+
+function processTailData(modId, entries, keyFn) {
+  initTail(modId);
+  const t = tailState[modId];
+  const body = findTailBody(modId);
+  if (!body) return;
+
+  if (t.replaying) {
+    // During replay: buffer new entries for later
+    for (const entry of entries) {
+      const k = keyFn(entry);
+      if (!t.seen.has(k)) {
+        t.seen.add(k);
+        t.buffer.push(renderers[modId]({ entries: [entry] }));
+      }
+    }
+    return;
+  }
+
+  if (t.paused) {
+    // Paused: buffer new entries only
+    for (const entry of entries) {
+      const k = keyFn(entry);
+      if (!t.seen.has(k)) {
+        t.seen.add(k);
+        t.buffer.push(renderers[modId]({ entries: [entry] }));
+      }
+    }
+    return;
+  }
+
+  // Live: render directly
+  t.seen.clear();
+  body.innerHTML = renderers[modId]({ entries, connections: entries });
+  body.scrollTo({ top: body.scrollHeight });
+  t.buffer = [];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -230,9 +346,20 @@ function renderModules() {
   for (const [modId, slotId] of Object.entries(S.modules)) {
     const body = $(`body-${slotId}`);
     if (!body || !moduleData[modId]) continue;
-    const renderer = renderers[modId];
-    if (renderer) {
-      body.innerHTML = renderer(moduleData[modId]);
+
+    if (TAIL_MODULES.has(modId)) {
+      // Tail modules: use processTailData for buffered scrolling
+      const data = moduleData[modId];
+      if (modId === 'journal') {
+        processTailData(modId, data.entries || [], e => e.time + e.msg);
+      } else if (modId === 'connections') {
+        processTailData(modId, data.connections || [], c => c.laddr + c.raddr + c.status);
+      }
+    } else {
+      const renderer = renderers[modId];
+      if (renderer) {
+        body.innerHTML = renderer(moduleData[modId]);
+      }
     }
   }
 }
