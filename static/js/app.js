@@ -181,7 +181,8 @@ function processTailData(modId, entries, keyFn) {
       const k = keyFn(entry);
       if (!t.seen.has(k)) {
         t.seen.add(k);
-        t.buffer.push(renderers[modId]({ entries: [entry] }));
+        const wrapper = modId === 'journal' ? { entries: [entry] } : { connections: [entry] };
+        t.buffer.push(renderers[modId](wrapper));
       }
     }
     return;
@@ -193,7 +194,8 @@ function processTailData(modId, entries, keyFn) {
       const k = keyFn(entry);
       if (!t.seen.has(k)) {
         t.seen.add(k);
-        t.buffer.push(renderers[modId]({ entries: [entry] }));
+        const wrapper = modId === 'journal' ? { entries: [entry] } : { connections: [entry] };
+        t.buffer.push(renderers[modId](wrapper));
       }
     }
     return;
@@ -205,7 +207,8 @@ function processTailData(modId, entries, keyFn) {
     const k = keyFn(entry);
     if (!t.seen.has(k)) {
       t.seen.add(k);
-      body.insertAdjacentHTML('beforeend', renderers[modId]({ entries: [entry] }));
+      const wrapper = modId === 'journal' ? { entries: [entry] } : { connections: [entry] };
+      body.insertAdjacentHTML('beforeend', renderers[modId](wrapper));
       appended++;
     }
   }
