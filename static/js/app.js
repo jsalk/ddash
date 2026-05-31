@@ -81,8 +81,14 @@ function renderLayout() {
           <button class="tail-btn" id="tail-btn-${modId}" data-mod="${modId}"><i class="fas fa-pause"></i> Pause</button>
         </div>` : ''}`;
     } else {
-      div.innerHTML = `<div class="module-head" style="color:var(--text-muted)">Empty slot</div>
-        <div class="module-body" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:10px">—</div>`;
+      if (S.liteEdit) {
+        const opts = MODULE_IDS.map(id => `<option value="${id}">${getModuleTitle(id)}</option>`).join('');
+        div.innerHTML = `<div class="module-head"><select class="mod-select" data-slot="${slot.id}"><option value="">— empty —</option>${opts}</select></div>
+          <div class="module-body" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:10px">—</div>`;
+      } else {
+        div.innerHTML = `<div class="module-head" style="color:var(--text-muted)">Empty slot</div>
+          <div class="module-body" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:10px">—</div>`;
+      }
     }
     grid.appendChild(div);
   }
