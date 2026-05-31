@@ -1,5 +1,6 @@
 """Network modules: Network, Connections, Interfaces."""
 import time
+from datetime import datetime
 
 import psutil
 
@@ -22,10 +23,12 @@ def collect_network() -> dict:
 
 @registry.register("connections", "Connections", "fa-plug", "network")
 def collect_connections() -> dict:
+    ts = datetime.now().strftime("%H:%M:%S")
     conns = []
     for c in psutil.net_connections(kind="inet"):
         try:
             conns.append({
+                "time": ts,
                 "proto": "TCP" if c.type == 1 else "UDP",
                 "laddr": f"{c.laddr.ip}:{c.laddr.port}" if c.laddr else "--",
                 "raddr": f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "--",
