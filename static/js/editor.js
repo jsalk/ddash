@@ -250,10 +250,7 @@ function render() {
     return `<div class="ce${sel}${mod}${typeClass}" data-id="${el.id}"
       style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan};z-index:${(el.depth || 0) + 1}">
       <div class="ce-head">
-        <button class="ce-depth-btn" data-action="depth-down" title="Send backward">⬇</button>
         <span class="ce-label">${el.label}</span>
-        <span class="ce-depth-val">${el.depth || 0}</span>
-        <button class="ce-depth-btn" data-action="depth-up" title="Bring forward">⬆</button>
         <span class="ce-type">${el.isModule ? 'module' : el.type}</span>
       </div>
       <div class="ce-body">${bodyContent}</div>
@@ -263,13 +260,24 @@ function render() {
     </div>`;
   }).join('');
 
+  // Render depth buttons as overlay (outside stacking context)
+  state.elements.forEach(el => {
+    canvas.insertAdjacentHTML('beforeend',
+      `<div class="ce-depth-overlay" data-id="${el.id}" style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan};z-index:${(el.depth || 0) + 100}">
+        <button class="ce-depth-btn" data-action="depth-down" data-id="${el.id}" title="Send backward">⬇</button>
+        <span class="ce-depth-val">${el.depth || 0}</span>
+        <button class="ce-depth-btn" data-action="depth-up" data-id="${el.id}" title="Bring forward">⬆</button>
+      </div>`
+    );
+  });
+
   // Wire element interactions — combined select + move
   canvas.querySelectorAll('.ce').forEach(el => {
     const id = parseInt(el.dataset.id);
 
     el.addEventListener('mousedown', e => {
-      // Ignore clicks on resize handles
-      if (e.target.closest('.resize-handle')) return;
+      // Ignore clicks on resize handles and depth overlays
+      if (e.target.closest('.resize-handle') || e.target.closest('.ce-depth-overlay')) return;
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
@@ -317,12 +325,12 @@ function render() {
 
   // Canvas click to deselect + depth buttons via delegation
   canvas.addEventListener('mousedown', e => {
-    // Depth button in module head
+    // Depth button (in overlay or properties)
     const depthBtn = e.target.closest('.ce-depth-btn');
     if (depthBtn) {
       e.stopPropagation();
-      const ce = depthBtn.closest('.ce');
-      const id = parseInt(ce.dataset.id);
+      e.preventDefault();
+      const id = parseInt(depthBtn.dataset.id);
       const elem = state.elements.find(x => x.id === id);
       if (!elem) return;
       pushUndo();
