@@ -85,7 +85,7 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 .ct-btn { padding: 4px 10px; border-radius: var(--radius-sm); font-size: 11px; display: flex; align-items: center; gap: 4px; color: var(--text-muted); transition: all 0.15s; }
 .ct-btn:hover { background: var(--surface-dynamic); color: var(--text); }
 .canvas-scroll { flex: 1; overflow: auto; padding: 24px; display: flex; justify-content: center; align-items: flex-start; }
-.canvas { display: grid; gap: 6px; background: var(--surface-offset); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px; min-width: 600px; min-height: 400px; position: relative; }
+.canvas { display: grid; gap: 6px; background: var(--surface-offset); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px; width: 100%; max-width: 900px; min-height: 500px; position: relative; }
 
 /* ── canvas elements ──────────────────────────────────────────────────── */
 .ce { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; position: relative; display: flex; flex-direction: column; min-height: 60px; cursor: move; transition: box-shadow 0.15s, border-color 0.15s; overflow: hidden; }
@@ -97,7 +97,8 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
 .ce-depth-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-faint); font-size: 8px; width: 16px; height: 16px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; line-height: 1; }
 .ce-depth-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--surface-2); }
 .ce-depth-val { font-size: 9px; color: var(--text-faint); min-width: 12px; text-align: center; flex-shrink: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0 2px; }
-.ce-depth-overlay { position: absolute; top: 6px; left: 6px; display: flex; align-items: center; gap: 2px; pointer-events: auto; }
+.ce-depth-overlay { position: absolute; display: flex; align-items: center; gap: 2px; pointer-events: none; z-index: 200; }
+.ce-depth-overlay .ce-depth-btn, .ce-depth-overlay .ce-depth-val { pointer-events: auto; }
 .ce .ce-body { flex: 1; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; }
 .ce .ce-body i { font-size: 20px; color: var(--primary); opacity: 0.5; }
 .ce.is-module .ce-head { border-bottom: 1px solid var(--divider); padding-bottom: 6px; }

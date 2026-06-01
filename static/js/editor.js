@@ -262,8 +262,10 @@ function render() {
 
   // Render depth buttons as overlay (outside stacking context)
   state.elements.forEach(el => {
+    const gCol = el.col;
+    const gRow = el.row;
     canvas.insertAdjacentHTML('beforeend',
-      `<div class="ce-depth-overlay" data-id="${el.id}" style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan};z-index:${(el.depth || 0) + 100}">
+      `<div class="ce-depth-overlay" data-id="${el.id}" data-col="${gCol}" data-row="${gRow}" data-cspan="${el.colSpan}" data-rspan="${el.rowSpan}" style="z-index:${(el.depth || 0) + 100}">
         <button class="ce-depth-btn" data-action="depth-down" data-id="${el.id}" title="Send backward">⬇</button>
         <span class="ce-depth-val">${el.depth || 0}</span>
         <button class="ce-depth-btn" data-action="depth-up" data-id="${el.id}" title="Bring forward">⬆</button>
@@ -351,6 +353,20 @@ function render() {
 
   renderElementList();
   renderProps();
+
+  // Position depth overlays over their modules
+  requestAnimationFrame(() => {
+    canvas.querySelectorAll('.ce-depth-overlay').forEach(ov => {
+      const id = parseInt(ov.dataset.id);
+      const ce = canvas.querySelector(`.ce[data-id="${id}"]`);
+      if (!ce) return;
+      const ceRect = ce.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      ov.style.position = 'absolute';
+      ov.style.left = (ceRect.left - canvasRect.left + 4) + 'px';
+      ov.style.top = (ceRect.top - canvasRect.top + 4) + 'px';
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
