@@ -218,17 +218,7 @@ function getElementAt(col, row) {
 }
 
 function wouldOverlap(el, excludeId = null) {
-  for (const other of state.elements) {
-    if (other.id === excludeId) continue;
-    // Allow overlap if either element has depth > 0
-    if ((el.depth || 0) > 0 || (other.depth || 0) > 0) continue;
-    if (el.col < other.col + other.colSpan &&
-        el.col + el.colSpan > other.col &&
-        el.row < other.row + other.rowSpan &&
-        el.row + el.rowSpan > other.row) {
-      return true;
-    }
-  }
+  // Overlap is allowed — depth controls stacking
   return false;
 }
 
@@ -260,7 +250,10 @@ function render() {
     return `<div class="ce${sel}${mod}${typeClass}" data-id="${el.id}"
       style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan};z-index:${(el.depth || 0) + 1}">
       <div class="ce-head">
+        <button class="ce-depth-btn" data-action="depth-down" title="Send backward">⬇</button>
         <span class="ce-label">${el.label}</span>
+        <span class="ce-depth-val">${el.depth || 0}</span>
+        <button class="ce-depth-btn" data-action="depth-up" title="Bring forward">⬆</button>
         <span class="ce-type">${el.isModule ? 'module' : el.type}</span>
       </div>
       <div class="ce-body">${bodyContent}</div>
@@ -322,8 +315,26 @@ function render() {
     });
   });
 
-  // Canvas click to deselect
+  // Canvas click to deselect + depth buttons via delegation
   canvas.addEventListener('mousedown', e => {
+    // Depth button in module head
+    const depthBtn = e.target.closest('.ce-depth-btn');
+    if (depthBtn) {
+      e.stopPropagation();
+      const ce = depthBtn.closest('.ce');
+      const id = parseInt(ce.dataset.id);
+      const elem = state.elements.find(x => x.id === id);
+      if (!elem) return;
+      pushUndo();
+      if (depthBtn.dataset.action === 'depth-up') {
+        elem.depth = (elem.depth || 0) + 1;
+      } else {
+        elem.depth = Math.max(0, (elem.depth || 0) - 1);
+      }
+      render();
+      saveCurrentPreset();
+      return;
+    }
     if (e.target === canvas) {
       state.selectedId = null;
       render();
