@@ -273,55 +273,48 @@ function render() {
     );
   });
 
-  // Wire element interactions — combined select + move
+  // Wire element interactions — single handler for select/move/resize
   canvas.querySelectorAll('.ce').forEach(el => {
     const id = parseInt(el.dataset.id);
 
     el.addEventListener('mousedown', e => {
-      // Ignore clicks on resize handles and depth overlays
-      if (e.target.closest('.resize-handle') || e.target.closest('.ce-depth-overlay')) return;
+      // Ignore clicks on depth overlays
+      if (e.target.closest('.ce-depth-overlay')) return;
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
 
-      selectElement(id);
-
       const elem = state.elements.find(x => x.id === id);
       if (!elem) return;
-      pushUndo();
-      dragState = {
-        type: 'move',
-        id,
-        startCol: elem.col,
-        startRow: elem.row,
-        startMouseX: e.clientX,
-        startMouseY: e.clientY,
-      };
-    });
-  });
 
-  // Wire resize handles
-  canvas.querySelectorAll('.resize-handle').forEach(handle => {
-    handle.addEventListener('mousedown', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      const el = handle.closest('.ce');
-      const id = parseInt(el.dataset.id);
-      const elem = state.elements.find(x => x.id === id);
-      if (!elem) return;
-      pushUndo();
-      dragState = {
-        type: 'resize',
-        id,
-        dir: handle.dataset.dir,
-        startCol: elem.col,
-        startRow: elem.row,
-        startColSpan: elem.colSpan,
-        startRowSpan: elem.rowSpan,
-        startMouseX: e.clientX,
-        startMouseY: e.clientY,
-      };
       selectElement(id);
+      pushUndo();
+
+      // Check if clicking a resize handle
+      const resizeHandle = e.target.closest('.resize-handle');
+      if (resizeHandle) {
+        dragState = {
+          type: 'resize',
+          id,
+          dir: resizeHandle.dataset.dir,
+          startCol: elem.col,
+          startRow: elem.row,
+          startColSpan: elem.colSpan,
+          startRowSpan: elem.rowSpan,
+          startMouseX: e.clientX,
+          startMouseY: e.clientY,
+        };
+      } else {
+        // Move
+        dragState = {
+          type: 'move',
+          id,
+          startCol: elem.col,
+          startRow: elem.row,
+          startMouseX: e.clientX,
+          startMouseY: e.clientY,
+        };
+      }
     });
   });
 
