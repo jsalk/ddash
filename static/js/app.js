@@ -10,6 +10,16 @@
 const $ = id => document.getElementById(id);
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SANITIZE — XSS prevention
+// ═══════════════════════════════════════════════════════════════════════════
+const _esc = document.createElement('div');
+function esc(str) {
+  if (str == null) return '';
+  _esc.textContent = String(str);
+  return _esc.innerHTML;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════
 const SK = 'ddash-v2';
@@ -27,8 +37,10 @@ function save() { localStorage.setItem(SK, JSON.stringify(S)); }
 let layouts = [];
 let moduleData = {};
 let sseSource = null;
+let weatherCity = '';
 const MODULE_IDS = ['cpu','gpu','memory','network','temps','nowplaying','disks','docker','journal','connections','uptime','ifaces'];
 const TAIL_MODULES = new Set(['journal', 'connections']);
+const TAIL_SEEN_MAX = 2000; // Cap seen Set to prevent memory leaks
 const tailState = {}; // { modId: { paused: bool, buffer: [], seen: Set, replaying: bool } }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -68,22 +80,22 @@ function renderLayout() {
       let headContent;
       if (S.liteEdit) {
         // Lite edit: dropdown to select module type
-        const opts = MODULE_IDS.map(id => `<option value="${id}" ${id === modId ? 'selected' : ''}>${getModuleTitle(id)}</option>`).join('');
-        headContent = `<i class="fas ${getModuleIcon(modId)}"></i><select class="mod-select" data-slot="${slot.id}">${opts}</select>`;
+        const opts = MODULE_IDS.map(id => `<option value="${id}" ${id === modId ? 'selected' : ''}>${esc(getModuleTitle(id))}</option>`).join('');
+        headContent = `<i class="fas ${esc(getModuleIcon(modId))}"></i><select class="mod-select" data-slot="${esc(slot.id)}">${opts}</select>`;
       } else {
-        headContent = `<i class="fas ${getModuleIcon(modId)}"></i> ${getModuleTitle(modId)}`;
+        headContent = `<i class="fas ${esc(getModuleIcon(modId))}"></i> ${esc(getModuleTitle(modId))}`;
       }
       div.innerHTML = `
         <div class="module-head">${headContent}</div>
-        <div class="module-body${scrollClass}" id="body-${slot.id}"></div>
+        <div class="module-body${scrollClass}" id="body-${esc(slot.id)}"></div>
         ${isTail ? `<div class="module-tail">
-          <span class="tail-status live" id="tail-status-${modId}">● LIVE</span>
-          <button class="tail-btn" id="tail-btn-${modId}" data-mod="${modId}"><i class="fas fa-pause"></i> Pause</button>
+          <span class="tail-status live" id="tail-status-${esc(modId)}">● LIVE</span>
+          <button class="tail-btn" id="tail-btn-${esc(modId)}" data-mod="${esc(modId)}"><i class="fas fa-pause"></i> Pause</button>
         </div>` : ''}`;
     } else {
       if (S.liteEdit) {
-        const opts = MODULE_IDS.map(id => `<option value="${id}">${getModuleTitle(id)}</option>`).join('');
-        div.innerHTML = `<div class="module-head"><select class="mod-select" data-slot="${slot.id}"><option value="">— empty —</option>${opts}</select></div>
+        const opts = MODULE_IDS.map(id => `<option value="${id}">${esc(getModuleTitle(id))}</option>`).join('');
+        div.innerHTML = `<div class="module-head"><select class="mod-select" data-slot="${esc(slot.id)}"><option value="">— empty —</option>${opts}</select></div>
           <div class="module-body" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:10px">—</div>`;
       } else {
         div.innerHTML = `<div class="module-head" style="color:var(--text-muted)">Empty slot</div>
@@ -125,6 +137,19 @@ function getModuleTitle(id) {
 function initTail(modId) {
   if (!tailState[modId]) {
     tailState[modId] = { paused: false, buffer: [], seen: new Set(), replaying: false };
+  }
+}
+
+function capTailSeen(modId) {
+  const t = tailState[modId];
+  if (!t || t.seen.size <= TAIL_SEEN_MAX) return;
+  // Drop oldest entries (Sets iterate in insertion order)
+  const drop = t.seen.size - TAIL_SEEN_MAX;
+  let dropped = 0;
+  for (const key of t.seen) {
+    if (dropped >= drop) break;
+    t.seen.delete(key);
+    dropped++;
   }
 }
 
@@ -200,6 +225,7 @@ function processTailData(modId, entries, keyFn) {
         t.buffer.push(renderers[modId](wrapper));
       }
     }
+    capTailSeen(modId);
     return;
   }
 
@@ -213,6 +239,7 @@ function processTailData(modId, entries, keyFn) {
         t.buffer.push(renderers[modId](wrapper));
       }
     }
+    capTailSeen(modId);
     return;
   }
 
@@ -227,6 +254,7 @@ function processTailData(modId, entries, keyFn) {
       appended++;
     }
   }
+  capTailSeen(modId);
   // Trim to 200 entries max
   while (body.children.length > 200) body.removeChild(body.firstChild);
   // Auto-scroll if we added something
@@ -263,7 +291,7 @@ const renderers = {
     return `<div class="gauge-row">
       <div class="gauge-ring"><svg viewBox="0 0 36 36"><circle class="gauge-bg" cx="18" cy="18" r="14"></circle><circle class="gauge-fill" cx="18" cy="18" r="14" stroke="${color}" stroke-dasharray="87.96" stroke-dashoffset="${off}"></circle><text class="gauge-text" x="18" y="18">${pct}%</text></svg></div>
       <div class="gauge-info">
-        <div class="mrow"><span class="ml">Name</span><span class="mv">${d.name||'--'}</span></div>
+        <div class="mrow"><span class="ml">Name</span><span class="mv">${esc(d.name)}</span></div>
         <div class="mrow"><span class="ml">Temp</span><span class="mv">${d.temp||0}°C</span></div>
         <div class="mrow"><span class="ml">Power</span><span class="mv">${d.power||0}W</span></div>
       </div>
@@ -303,13 +331,13 @@ const renderers = {
   temps(d) {
     if (!d || Object.keys(d).length === 0) return '<div style="color:var(--text-muted)">No sensors</div>';
     return Object.entries(d).map(([k, v]) => {
-      const short = k.replace(/-.*/, '').replace(/_pci.*/, '');
+      const short = esc(k.replace(/-.*/, '').replace(/_pci.*/, ''));
       const pct = Math.min(100, v);
       const color = v > 75 ? 'var(--red)' : v > 50 ? 'var(--yellow)' : 'var(--green)';
       return `<div class="temp-bar">
         <span class="name">${short}</span>
         <div class="track"><div class="fill" style="width:${pct}%;background:${color}"></div></div>
-        <span class="val" style="color:${color}">${v.toFixed?v.toFixed(1):v}°</span>
+        <span class="val" style="color:${color}">${typeof v === 'number' ? v.toFixed(1) : v}°</span>
       </div>`;
     }).join('');
   },
@@ -318,9 +346,9 @@ const renderers = {
     if (!d) return '<div class="np-idle">No media playing</div>';
     const pct = d.duration > 0 ? (d.position / d.duration * 100) : 0;
     return `
-      <div class="np-source">${d.source}</div>
-      <div class="np-title">${d.title || 'Unknown'}</div>
-      <div class="np-artist">${d.artist || ''}</div>
+      <div class="np-source">${esc(d.source)}</div>
+      <div class="np-title">${esc(d.title) || 'Unknown'}</div>
+      <div class="np-artist">${esc(d.artist) || ''}</div>
       <div class="np-progress"><div class="bar-track"><div class="bar-fill accent" style="width:${pct}%"></div></div></div>
       <div class="np-time"><span>${fmtTime(d.position)}</span><span>${fmtTime(d.duration)}</span></div>`;
   },
@@ -329,7 +357,7 @@ const renderers = {
     if (!d?.disks) return '';
     return d.disks.map(dk => `
       <div class="disk-item">
-        <div class="disk-mount">${dk.mount}</div>
+        <div class="disk-mount">${esc(dk.mount)}</div>
         <div class="bar-track"><div class="bar-fill ${barColor(dk.percent)}" style="width:${dk.percent}%"></div></div>
         <div class="disk-info"><span>${fmtBytes(dk.used)}</span><span>${dk.percent}%</span></div>
       </div>`).join('');
@@ -339,13 +367,13 @@ const renderers = {
     if (!d?.containers?.length) return '<div style="color:var(--text-muted)">No containers</div>';
     return d.containers.map(c => {
       const up = c.status.toLowerCase().includes('up');
-      return `<span class="chip"><span class="dot ${up?'up':'down'}"></span>${c.name}</span>`;
+      return `<span class="chip"><span class="dot ${up?'up':'down'}"></span>${esc(c.name)}</span>`;
     }).join('');
   },
 
   uptime(d) {
     return `<div style="font-size:10px">
-      <div class="mrow"><span class="ml">Uptime</span><span class="mv">${d.uptime_human||'--'}</span></div>
+      <div class="mrow"><span class="ml">Uptime</span><span class="mv">${esc(d.uptime_human)||'--'}</span></div>
       <div class="mrow"><span class="ml">Load 1m</span><span class="mv">${d.load_1m||'--'}</span></div>
       <div class="mrow"><span class="ml">Load 5m</span><span class="mv">${d.load_5m||'--'}</span></div>
       <div class="mrow"><span class="ml">Load 15m</span><span class="mv">${d.load_15m||'--'}</span></div>
@@ -358,8 +386,8 @@ const renderers = {
     return d.interfaces.map(iface => `
       <div class="iface-item">
         <span class="iface-led ${iface.up?'up':'down'}"></span>
-        <span class="iface-name">${iface.name}</span>
-        <span class="iface-ip">${iface.ips[0]||'--'}</span>
+        <span class="iface-name">${esc(iface.name)}</span>
+        <span class="iface-ip">${esc(iface.ips[0])||'--'}</span>
         <span class="iface-speed">${iface.speed||0} Mb/s</span>
       </div>`).join('');
   },
@@ -368,7 +396,7 @@ const renderers = {
     if (!d?.entries?.length) return '<div style="color:var(--text-muted)">No entries</div>';
     return d.entries.map(e => {
       const cls = e.level === 'error' ? 'err' : e.level === 'warn' ? 'warn' : '';
-      return `<div class="tail-entry"><span class="ts">${e.time}</span> <span class="${cls}">${e.msg}</span></div>`;
+      return `<div class="tail-entry"><span class="ts">${esc(e.time)}</span> <span class="${cls}">${esc(e.msg)}</span></div>`;
     }).join('');
   },
 
@@ -376,8 +404,8 @@ const renderers = {
     if (!d?.connections?.length) return '<div style="color:var(--text-muted)">No connections</div>';
     return d.connections.map(c => {
       const cls = c.status === 'ESTABLISHED' ? 'est' : 'other';
-      const proc = c.process ? ` <span style="color:var(--accent)">${c.process}</span>` : '';
-      return `<div class="tail-entry"><span class="ts">${c.time || ''}</span> <span class="conn-status ${cls}">${c.status.substring(0,4)}</span> <span class="conn-proto">${c.proto}</span> <span class="conn-addr">${c.raddr}</span>${proc}</div>`;
+      const proc = c.process ? ` <span style="color:var(--accent)">${esc(c.process)}</span>` : '';
+      return `<div class="tail-entry"><span class="ts">${esc(c.time)}</span> <span class="conn-status ${cls}">${esc(c.status.substring(0,4))}</span> <span class="conn-proto">${esc(c.proto)}</span> <span class="conn-addr">${esc(c.raddr)}</span>${proc}</div>`;
     }).join('');
   },
 };
@@ -415,7 +443,7 @@ function connect() {
       const d = JSON.parse(ev.data);
       moduleData = d.modules || {};
       renderModules();
-    } catch(e) {}
+    } catch(e) { console.warn('SSE parse error:', e); }
   };
   sseSource.onerror = () => { sseSource.close(); sseSource = null; setTimeout(connect, 3000); };
 }
@@ -431,8 +459,8 @@ function updateHeader() {
   if (moduleData.uptime) {
     $('uptime').textContent = 'up ' + (moduleData.uptime.uptime_human || '');
   }
-  // Weather placeholder
-  $('weather').textContent = S.weatherCity || '';
+  // Weather from config
+  $('weather').textContent = weatherCity || '';
 }
 
 setInterval(() => {
@@ -508,9 +536,13 @@ function initMenu() {
   liteEditEl.addEventListener('click', () => {
     S.liteEdit = !S.liteEdit;
     liteEditEl.classList.toggle('on', S.liteEdit);
+    liteEditEl.setAttribute('aria-checked', S.liteEdit);
     document.body.classList.toggle('lite-edit', S.liteEdit);
     save();
     renderLayout();
+  });
+  liteEditEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); liteEditEl.click(); }
   });
   document.body.classList.toggle('lite-edit', S.liteEdit);
 
@@ -541,9 +573,9 @@ function initMenu() {
 function renderLayoutList() {
   const list = $('layout-list');
   list.innerHTML = layouts.map(l => `
-    <div class="layout-card ${l.id === S.layout ? 'active' : ''}" data-id="${l.id}">
-      <div class="lc-name">${l.name}</div>
-      <div class="lc-desc">${l.description}</div>
+    <div class="layout-card ${l.id === S.layout ? 'active' : ''}" data-id="${esc(l.id)}">
+      <div class="lc-name">${esc(l.name)}</div>
+      <div class="lc-desc">${esc(l.description)}</div>
     </div>`).join('');
 
   list.querySelectorAll('.layout-card').forEach(card => {
@@ -567,8 +599,8 @@ function renderModuleLists() {
 
   const assignedEl = $('mod-assigned');
   const availableEl = $('mod-available');
-  assignedEl.innerHTML = assigned.map(([id]) => `<div class="dual-item" data-mod="${id}">${getModuleTitle(id)}</div>`).join('');
-  availableEl.innerHTML = available.map(id => `<div class="dual-item" data-mod="${id}">${getModuleTitle(id)}</div>`).join('');
+  assignedEl.innerHTML = assigned.map(([id]) => `<div class="dual-item" data-mod="${esc(id)}">${esc(getModuleTitle(id))}</div>`).join('');
+  availableEl.innerHTML = available.map(id => `<div class="dual-item" data-mod="${esc(id)}">${esc(getModuleTitle(id))}</div>`).join('');
 
   // Click to select
   [assignedEl, availableEl].forEach(el => {
@@ -604,7 +636,10 @@ function assignSelected(toAssigned) {
 }
 
 function applyTheme() {
-  document.body.className = S.theme ? `theme-${S.theme}` : '';
+  // Remove all theme-* classes, preserve others
+  const classes = document.body.className.split(/\s+/).filter(c => !c.startsWith('theme-'));
+  if (S.theme) classes.push(`theme-${S.theme}`);
+  document.body.className = classes.join(' ');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -615,7 +650,14 @@ async function init() {
   try {
     const r = await fetch('/api/layouts');
     layouts = await r.json();
-  } catch(e) { layouts = []; }
+  } catch(e) { layouts = []; console.error('Failed to fetch layouts:', e); }
+
+  // Fetch config (weather city, etc.)
+  try {
+    const r = await fetch('/api/config');
+    const cfg = await r.json();
+    weatherCity = cfg.weather_city || '';
+  } catch(e) { console.warn('Failed to fetch config:', e); }
 
   renderLayout();
   renderModuleLists();

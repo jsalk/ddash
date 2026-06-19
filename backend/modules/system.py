@@ -1,4 +1,5 @@
 """System modules: CPU, GPU, Memory, Disks, Uptime."""
+import logging
 import time
 import subprocess
 from datetime import datetime
@@ -6,6 +7,8 @@ from datetime import datetime
 import psutil
 
 from backend.modules import registry
+
+log = logging.getLogger(__name__)
 
 
 @registry.register("cpu", "CPU", "fa-microchip", "system")
@@ -44,8 +47,12 @@ def collect_gpu() -> dict:
                     "vram_used": int(parts[4]),
                     "vram_total": int(parts[5]),
                 }
+    except FileNotFoundError:
+        log.debug("nvidia-smi not found — GPU data unavailable")
+    except subprocess.TimeoutExpired:
+        log.warning("nvidia-smi timed out")
     except Exception:
-        pass
+        log.exception("GPU collector failed")
     return {"name": "N/A", "utilization": 0, "temp": 0, "power": 0, "vram_used": 0, "vram_total": 0}
 
 
@@ -73,7 +80,7 @@ def collect_disks() -> dict:
                 "percent": usage.percent,
             })
         except PermissionError:
-            pass
+            log.debug("Permission denied for disk %s", part.mountpoint)
     return {"disks": disks}
 
 
@@ -103,4 +110,5 @@ def collect_temps() -> dict:
         temps = psutil.sensors_temperatures()
         return {k: v[0].current for k, v in temps.items() if v}
     except Exception:
+        log.exception("Temperature sensor read failed")
         return {}

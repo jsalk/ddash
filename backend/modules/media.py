@@ -1,4 +1,5 @@
 """Media modules: Now Playing (MPRIS + Audiobookshelf)."""
+import logging
 import subprocess
 
 import requests
@@ -6,7 +7,10 @@ import requests
 from backend.modules import registry
 from backend.config import Config
 
+log = logging.getLogger(__name__)
+
 _config = Config.load()
+_session = requests.Session()
 
 
 @registry.register("nowplaying", "Now Playing", "fa-play", "media")
@@ -35,13 +39,17 @@ def collect_nowplaying() -> dict | None:
                     "duration": dur,
                     "status": status,
                 }
+    except FileNotFoundError:
+        log.debug("playerctl not found — MPRIS unavailable")
+    except subprocess.TimeoutExpired:
+        log.debug("playerctl timed out")
     except Exception:
-        pass
+        log.exception("MPRIS collector failed")
 
     # Audiobookshelf (remote)
     if _config.abs_token:
         try:
-            r = requests.get(
+            r = _session.get(
                 f"{_config.abs_url}/api/me/listening-sessions?itemsPerPage=1",
                 headers={"Authorization": f"Bearer {_config.abs_token}"},
                 timeout=3,
@@ -59,6 +67,8 @@ def collect_nowplaying() -> dict | None:
                         "duration": meta.get("duration", 0),
                         "status": "Playing" if not s.get("stopped", True) else "Paused",
                     }
+        except requests.ConnectionError:
+            log.debug("Audiobookshelf unreachable at %s", _config.abs_url)
         except Exception:
-            pass
+            log.exception("Audiobookshelf collector failed")
     return None

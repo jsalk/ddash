@@ -1,9 +1,5 @@
 """
-ddash v2.0 — API Contract Tests (RED phase)
-
-These tests define what the backend MUST return. They will fail until
-the implementation matches. This is TDD — write the test first, then
-make it pass.
+ddash v2.0 — API Contract Tests
 
 Run: .venv/bin/pytest tests/ -v
 """
@@ -14,9 +10,10 @@ from backend.main import app
 
 
 @pytest.fixture
-def client():
+async def client():
     transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
 
 
 # ── Module Registry ────────────────────────────────────────────────────────
@@ -191,3 +188,15 @@ async def test_health(client):
     r = await client.get("/api/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+# ── Config ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.anyio
+async def test_config_returns_weather_city(client):
+    """GET /api/config must return weather_city."""
+    r = await client.get("/api/config")
+    assert r.status_code == 200
+    body = r.json()
+    assert "weather_city" in body
+    assert isinstance(body["weather_city"], str)

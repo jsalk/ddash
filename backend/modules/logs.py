@@ -1,7 +1,10 @@
 """Log modules: Docker, Journal."""
+import logging
 import subprocess
 
 from backend.modules import registry
+
+log = logging.getLogger(__name__)
 
 
 @registry.register("docker", "Docker", "fa-docker", "logs")
@@ -22,8 +25,12 @@ def collect_docker() -> dict:
                         "image": parts[2],
                     })
             return {"containers": containers}
+    except FileNotFoundError:
+        log.debug("docker not found — Docker data unavailable")
+    except subprocess.TimeoutExpired:
+        log.warning("docker ps timed out")
     except Exception:
-        pass
+        log.exception("Docker collector failed")
     return {"containers": []}
 
 
@@ -49,6 +56,10 @@ def collect_journal() -> dict:
                         level = "warn"
                     entries.append({"time": ts, "msg": msg, "level": level})
             return {"entries": entries}
+    except FileNotFoundError:
+        log.debug("journalctl not found")
+    except subprocess.TimeoutExpired:
+        log.warning("journalctl timed out")
     except Exception:
-        pass
+        log.exception("Journal collector failed")
     return {"entries": []}

@@ -1,0 +1,7 @@
+{
+  "ABS_URL": "http://your-audiobookshelf-host:13378",
+  "ABS_TOKEN": "your-bearer-token-here",
+  "ABS_FRESHNESS_SEC": 60,
+  "ABS_POLL_SEC": 5,
+  "WEATHER_CITY": "Chicago"
+}

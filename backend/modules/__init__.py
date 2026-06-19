@@ -9,8 +9,11 @@ Usage:
         ...
 """
 from __future__ import annotations
+import logging
 from dataclasses import dataclass
 from typing import Callable
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,7 @@ class Registry:
             try:
                 results[mid] = mod.collect()
             except Exception:
+                log.exception("Collector failed: %s", mid)
                 results[mid] = None
         return results
 

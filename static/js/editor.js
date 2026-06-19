@@ -7,6 +7,16 @@
 const $ = id => document.getElementById(id);
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SANITIZE — XSS prevention
+// ═══════════════════════════════════════════════════════════════════════════
+const _esc = document.createElement('div');
+function esc(str) {
+  if (str == null) return '';
+  _esc.textContent = String(str);
+  return _esc.innerHTML;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════
 const MODULE_TYPES = [
@@ -110,6 +120,7 @@ let undoStack = [];
 let redoStack = [];
 let nextId = 1;
 let dragState = null;
+let dragRafPending = false;
 
 // ── localStorage persistence ──────────────────────────────────────────────
 function saveLayouts() {
@@ -132,7 +143,7 @@ function loadLayouts() {
         preset.elements = data[preset.id].elements;
       }
     }
-  } catch(e) {}
+  } catch(e) { console.warn('Failed to load layouts:', e); }
 }
 
 function resetLayout(presetId) {
@@ -210,18 +221,6 @@ function createElement(type, col, row, colSpan = 2, rowSpan = 1) {
   };
 }
 
-function getElementAt(col, row) {
-  return state.elements.find(e =>
-    col >= e.col && col < e.col + e.colSpan &&
-    row >= e.row && row < e.row + e.rowSpan
-  );
-}
-
-function wouldOverlap(el, excludeId = null) {
-  // Overlap is allowed — depth controls stacking
-  return false;
-}
-
 function boundsOK(el) {
   return el.col >= 1 && el.row >= 1 &&
          el.col + el.colSpan - 1 <= state.cols &&
@@ -242,16 +241,16 @@ function render() {
     const mod = el.isModule ? ' is-module' : '';
     const typeClass = el.type.startsWith('separator') ? ` is-${el.type}` : el.type === 'text' ? ' is-text' : '';
     let bodyContent = '';
-    if (el.isModule) bodyContent = `<i class="fas ${el.icon}"></i>`;
-    else if (el.type === 'text') bodyContent = el.content || 'Text';
+    if (el.isModule) bodyContent = `<i class="fas ${esc(el.icon)}"></i>`;
+    else if (el.type === 'text') bodyContent = esc(el.content || 'Text');
     else if (el.type === 'blank') bodyContent = '';
     else bodyContent = ''; // separator has its own styling
 
     return `<div class="ce${sel}${mod}${typeClass}" data-id="${el.id}"
       style="grid-column:${el.col}/span${el.colSpan};grid-row:${el.row}/span${el.rowSpan};z-index:${(el.depth || 0) + 1}">
       <div class="ce-head">
-        <span class="ce-label">${el.label}</span>
-        <span class="ce-type">${el.isModule ? 'module' : el.type}</span>
+        <span class="ce-label">${esc(el.label)}</span>
+        <span class="ce-type">${el.isModule ? 'module' : esc(el.type)}</span>
       </div>
       <div class="ce-body">${bodyContent}</div>
       <div class="resize-handle rh-e" data-dir="e"></div>
@@ -266,24 +265,68 @@ function render() {
     const gRow = el.row;
     canvas.insertAdjacentHTML('beforeend',
       `<div class="ce-depth-overlay" data-id="${el.id}" data-col="${gCol}" data-row="${gRow}" data-cspan="${el.colSpan}" data-rspan="${el.rowSpan}" style="z-index:${(el.depth || 0) + 100}">
-        <button class="ce-depth-btn" data-action="depth-down" data-id="${el.id}" title="Send backward">⬇</button>
+        <button class="ce-depth-btn" data-action="depth-down" data-id="${el.id}" title="Send backward">&#11015;</button>
         <span class="ce-depth-val">${el.depth || 0}</span>
-        <button class="ce-depth-btn" data-action="depth-up" data-id="${el.id}" title="Bring forward">⬆</button>
+        <button class="ce-depth-btn" data-action="depth-up" data-id="${el.id}" title="Bring forward">&#11014;</button>
       </div>`
     );
   });
 
-  // Wire element interactions — single handler for select/move/resize
-  canvas.querySelectorAll('.ce').forEach(el => {
-    const id = parseInt(el.dataset.id);
+  renderElementList();
+  renderProps();
 
-    el.addEventListener('mousedown', e => {
+  // Position depth overlays over their modules
+  requestAnimationFrame(() => {
+    canvas.querySelectorAll('.ce-depth-overlay').forEach(ov => {
+      const id = parseInt(ov.dataset.id);
+      const ce = canvas.querySelector(`.ce[data-id="${id}"]`);
+      if (!ce) return;
+      const ceRect = ce.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      ov.style.position = 'absolute';
+      ov.style.left = (ceRect.left - canvasRect.left + 4) + 'px';
+      ov.style.top = (ceRect.top - canvasRect.top + 4) + 'px';
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANVAS EVENT DELEGATION — set up ONCE in init(), not in render()
+// ═══════════════════════════════════════════════════════════════════════════
+function initCanvasEvents() {
+  const canvas = $('canvas');
+
+  // Single delegated mousedown for element select/move/resize
+  canvas.addEventListener('mousedown', e => {
+    // Depth button
+    const depthBtn = e.target.closest('.ce-depth-btn');
+    if (depthBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const id = parseInt(depthBtn.dataset.id);
+      const elem = state.elements.find(x => x.id === id);
+      if (!elem) return;
+      pushUndo();
+      if (depthBtn.dataset.action === 'depth-up') {
+        elem.depth = (elem.depth || 0) + 1;
+      } else {
+        elem.depth = Math.max(0, (elem.depth || 0) - 1);
+      }
+      render();
+      saveCurrentPreset();
+      return;
+    }
+
+    // Element click
+    const ce = e.target.closest('.ce');
+    if (ce) {
       // Ignore clicks on depth overlays
       if (e.target.closest('.ce-depth-overlay')) return;
       if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
 
+      const id = parseInt(ce.dataset.id);
       const elem = state.elements.find(x => x.id === id);
       if (!elem) return;
 
@@ -315,97 +358,61 @@ function render() {
           startMouseY: e.clientY,
         };
       }
-    });
-  });
-
-  // Canvas click to deselect + depth buttons via delegation
-  canvas.addEventListener('mousedown', e => {
-    // Depth button (in overlay or properties)
-    const depthBtn = e.target.closest('.ce-depth-btn');
-    if (depthBtn) {
-      e.stopPropagation();
-      e.preventDefault();
-      const id = parseInt(depthBtn.dataset.id);
-      const elem = state.elements.find(x => x.id === id);
-      if (!elem) return;
-      pushUndo();
-      if (depthBtn.dataset.action === 'depth-up') {
-        elem.depth = (elem.depth || 0) + 1;
-      } else {
-        elem.depth = Math.max(0, (elem.depth || 0) - 1);
-      }
-      render();
-      saveCurrentPreset();
       return;
     }
+
+    // Click on empty canvas — deselect
     if (e.target === canvas) {
       state.selectedId = null;
       render();
     }
   });
 
-  renderElementList();
-  renderProps();
+  // RAF-throttled drag handler
+  document.addEventListener('mousemove', e => {
+    if (!dragState) return;
+    if (dragRafPending) return;
+    dragRafPending = true;
 
-  // Position depth overlays over their modules
-  requestAnimationFrame(() => {
-    canvas.querySelectorAll('.ce-depth-overlay').forEach(ov => {
-      const id = parseInt(ov.dataset.id);
-      const ce = canvas.querySelector(`.ce[data-id="${id}"]`);
-      if (!ce) return;
-      const ceRect = ce.getBoundingClientRect();
-      const canvasRect = canvas.getBoundingClientRect();
-      ov.style.position = 'absolute';
-      ov.style.left = (ceRect.left - canvasRect.left + 4) + 'px';
-      ov.style.top = (ceRect.top - canvasRect.top + 4) + 'px';
+    requestAnimationFrame(() => {
+      dragRafPending = false;
+      if (!dragState) return;
+
+      const canvas = $('canvas');
+      const rect = canvas.getBoundingClientRect();
+      const cellW = rect.width / state.cols;
+      const cellH = rect.height / state.rows;
+      const dx = e.clientX - dragState.startMouseX;
+      const dy = e.clientY - dragState.startMouseY;
+      const dcol = Math.round(dx / cellW);
+      const drow = Math.round(dy / cellH);
+
+      const elem = state.elements.find(x => x.id === dragState.id);
+      if (!elem) return;
+
+      if (dragState.type === 'move') {
+        elem.col = Math.max(1, Math.min(state.cols - elem.colSpan + 1, dragState.startCol + dcol));
+        elem.row = Math.max(1, Math.min(state.rows - elem.rowSpan + 1, dragState.startRow + drow));
+      } else if (dragState.type === 'resize') {
+        const dir = dragState.dir;
+        if (dir.includes('e')) {
+          elem.colSpan = Math.max(1, Math.min(state.cols - elem.col + 1, dragState.startColSpan + dcol));
+        }
+        if (dir.includes('s')) {
+          elem.rowSpan = Math.max(1, Math.min(state.rows - elem.row + 1, dragState.startRowSpan + drow));
+        }
+      }
+      render();
     });
   });
+
+  document.addEventListener('mouseup', () => {
+    if (dragState) {
+      dragState = null;
+      saveCurrentPreset();
+    }
+  });
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DRAG HANDLER
-// ═══════════════════════════════════════════════════════════════════════════
-document.addEventListener('mousemove', e => {
-  if (!dragState) return;
-  const canvas = $('canvas');
-  const rect = canvas.getBoundingClientRect();
-  const cellW = rect.width / state.cols;
-  const cellH = rect.height / state.rows;
-  const dx = e.clientX - dragState.startMouseX;
-  const dy = e.clientY - dragState.startMouseY;
-  const dcol = Math.round(dx / cellW);
-  const drow = Math.round(dy / cellH);
-
-  const elem = state.elements.find(x => x.id === dragState.id);
-  if (!elem) return;
-
-  if (dragState.type === 'move') {
-    const newCol = Math.max(1, Math.min(state.cols - elem.colSpan + 1, dragState.startCol + dcol));
-    const newRow = Math.max(1, Math.min(state.rows - elem.rowSpan + 1, dragState.startRow + drow));
-    // Check overlap before applying
-    const testEl = { ...elem, col: newCol, row: newRow };
-    if (!wouldOverlap(testEl, elem.id)) {
-      elem.col = newCol;
-      elem.row = newRow;
-    }
-  } else if (dragState.type === 'resize') {
-    const dir = dragState.dir;
-    if (dir.includes('e')) {
-      elem.colSpan = Math.max(1, Math.min(state.cols - elem.col + 1, dragState.startColSpan + dcol));
-    }
-    if (dir.includes('s')) {
-      elem.rowSpan = Math.max(1, Math.min(state.rows - elem.row + 1, dragState.startRowSpan + drow));
-    }
-  }
-  render();
-});
-
-document.addEventListener('mouseup', () => {
-  if (dragState) {
-    dragState = null;
-    saveCurrentPreset();
-  }
-});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SELECTION & PROPERTIES
@@ -428,13 +435,13 @@ function renderProps() {
   // Type dropdown
   if (el.isModule) {
     const opts = MODULE_TYPES.map(m =>
-      `<option value="${m.id}" ${m.id === el.type ? 'selected' : ''}>${m.label}</option>`
+      `<option value="${esc(m.id)}" ${m.id === el.type ? 'selected' : ''}>${esc(m.label)}</option>`
     ).join('');
     html += `<div class="props-row"><label class="props-label">Module Type</label>
       <select class="props-select" id="prop-type">${opts}</select></div>`;
   } else {
     const opts = STRUCT_TYPES.map(s =>
-      `<option value="${s.id}" ${s.id === el.type ? 'selected' : ''}>${s.label}</option>`
+      `<option value="${esc(s.id)}" ${s.id === el.type ? 'selected' : ''}>${esc(s.label)}</option>`
     ).join('');
     html += `<div class="props-row"><label class="props-label">Element Type</label>
       <select class="props-select" id="prop-type">${opts}</select></div>`;
@@ -442,7 +449,7 @@ function renderProps() {
 
   // Label
   html += `<div class="props-row"><label class="props-label">Label</label>
-    <input class="props-input" id="prop-label" value="${el.label}"></div>`;
+    <input class="props-input" id="prop-label" value="${esc(el.label)}"></div>`;
 
   // Position
   html += `<div class="props-row"><label class="props-label">Position</label>
@@ -461,15 +468,15 @@ function renderProps() {
   // Content (for text blocks)
   if (el.type === 'text') {
     html += `<div class="props-row"><label class="props-label">Content</label>
-      <textarea class="props-input" id="prop-content" rows="3">${el.content}</textarea></div>`;
+      <textarea class="props-input" id="prop-content" rows="3">${esc(el.content)}</textarea></div>`;
   }
 
   // Depth (z-order)
   html += `<div class="props-row"><label class="props-label">Depth (z-order)</label>
     <div class="props-row-inline">
-      <button class="ct-btn" id="depth-down" title="Send backward">⬇ Back</button>
+      <button class="ct-btn" id="depth-down" title="Send backward">&#11015; Back</button>
       <span style="font-size:11px;min-width:20px;text-align:center">${el.depth || 0}</span>
-      <button class="ct-btn" id="depth-up" title="Bring forward">⬆ Front</button>
+      <button class="ct-btn" id="depth-up" title="Bring forward">&#11014; Front</button>
     </div></div>`;
 
   // Delete button
@@ -542,8 +549,8 @@ function renderElementList() {
   list.innerHTML = state.elements.map(el => {
     const active = el.id === state.selectedId ? ' active' : '';
     return `<div class="el-item${active}" data-id="${el.id}">
-      <i class="fas ${el.icon}"></i>
-      <span class="el-name">${el.label}</span>
+      <i class="fas ${esc(el.icon)}"></i>
+      <span class="el-name">${esc(el.label)}</span>
       <span class="el-pos">${el.col},${el.row}</span>
     </div>`;
   }).join('');
@@ -562,15 +569,18 @@ function initPalette() {
   const modPalette = $('palette-modules');
   const structPalette = $('palette-structure');
 
-  MODULE_TYPES.forEach(m => {
-    modPalette.innerHTML += `<div class="palette-item" data-type="${m.id}" data-module="true" draggable="true">
-      <i class="fas ${m.icon}"></i><span class="pi-label">${m.label}</span></div>`;
-  });
+  // Build palette items without innerHTML +=
+  const modItems = MODULE_TYPES.map(m =>
+    `<div class="palette-item" data-type="${esc(m.id)}" data-module="true" draggable="true">
+      <i class="fas ${esc(m.icon)}"></i><span class="pi-label">${esc(m.label)}</span></div>`
+  ).join('');
+  modPalette.innerHTML = modItems;
 
-  STRUCT_TYPES.forEach(s => {
-    structPalette.innerHTML += `<div class="palette-item" data-type="${s.id}" data-module="false" draggable="true">
-      <i class="fas ${s.icon}"></i><span class="pi-label">${s.label}</span></div>`;
-  });
+  const structItems = STRUCT_TYPES.map(s =>
+    `<div class="palette-item" data-type="${esc(s.id)}" data-module="false" draggable="true">
+      <i class="fas ${esc(s.icon)}"></i><span class="pi-label">${esc(s.label)}</span></div>`
+  ).join('');
+  structPalette.innerHTML = structItems;
 
   // Drag from palette to canvas
   document.querySelectorAll('.palette-item').forEach(item => {
@@ -594,15 +604,12 @@ function initPalette() {
       const cellH = rect.height / state.rows;
       const col = Math.max(1, Math.min(state.cols, Math.floor((e.clientX - rect.left) / cellW) + 1));
       const row = Math.max(1, Math.min(state.rows, Math.floor((e.clientY - rect.top) / cellH) + 1));
-      const colSpan = data.isModule ? 2 : 2;
-      const el = createElement(data.type, col, row, colSpan, 1);
-      if (!wouldOverlap(el)) {
-        pushUndo();
-        state.elements.push(el);
-        selectElement(el.id);
-        saveCurrentPreset();
-      }
-    } catch(err) {}
+      const el = createElement(data.type, col, row, 2, 1);
+      pushUndo();
+      state.elements.push(el);
+      selectElement(el.id);
+      saveCurrentPreset();
+    } catch(err) { console.warn('Drop failed:', err); }
   });
 }
 
@@ -639,7 +646,7 @@ function saveCurrentPreset() {
 function renderPresetTabs() {
   const tabs = $('preset-tabs');
   tabs.innerHTML = PRESETS.map(p =>
-    `<button class="preset-tab${p.id === state.activePreset ? ' active' : ''}" data-id="${p.id}">${p.name}</button>`
+    `<button class="preset-tab${p.id === state.activePreset ? ' active' : ''}" data-id="${esc(p.id)}">${esc(p.name)}</button>`
   ).join('');
 
   tabs.querySelectorAll('.preset-tab').forEach(tab => {
@@ -692,7 +699,7 @@ function loadJSON(file) {
       state.activePreset = null;
       renderPresetTabs();
       render();
-    } catch(err) { alert('Invalid JSON file'); }
+    } catch(err) { showNotification('Invalid JSON file', 'error'); }
   };
   reader.readAsText(file);
 }
@@ -714,8 +721,8 @@ function showPreview() {
     if (isSep) cls += ` is-${el.type}`;
     if (isText) cls += ' is-text';
     let inner = '';
-    if (el.isModule) inner = `<div class="ce-head"><span class="ce-label">${el.label}</span></div><div class="ce-body"><i class="fas ${el.icon}"></i></div>`;
-    else if (isText) inner = `<div class="ce-body">${el.content}</div>`;
+    if (el.isModule) inner = `<div class="ce-head"><span class="ce-label">${esc(el.label)}</span></div><div class="ce-body"><i class="fas ${esc(el.icon)}"></i></div>`;
+    else if (isText) inner = `<div class="ce-body">${esc(el.content)}</div>`;
     else if (isBlank) inner = '';
     else inner = '<div class="ce-body"></div>';
 
@@ -726,11 +733,31 @@ function showPreview() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// NOTIFICATION (replaces alert/confirm where possible)
+// ═══════════════════════════════════════════════════════════════════════════
+function showNotification(msg, type = 'info') {
+  let el = document.getElementById('editor-notification');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'editor-notification';
+    el.style.cssText = 'position:fixed;top:48px;right:16px;z-index:10000;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:500;transition:opacity 0.3s;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.background = type === 'error' ? 'var(--danger)' : 'var(--accent)';
+  el.style.color = '#fff';
+  el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 function init() {
   loadLayouts(); // Load saved layouts from localStorage
   initPalette();
+  initCanvasEvents(); // Single mousedown delegation — NOT inside render()
   renderPresetTabs();
   loadPreset('center-spotlight');
 
@@ -818,9 +845,33 @@ function init() {
   $('btn-preview').addEventListener('click', showPreview);
   $('btn-exit-preview').addEventListener('click', () => $('preview-overlay').classList.remove('open'));
 
-  // Apply (placeholder — would POST to backend)
-  $('btn-apply').addEventListener('click', () => {
-    alert('Layout saved! (In production this would POST to /api/layouts)');
+  // Apply — POST current preset layout to backend
+  $('btn-apply').addEventListener('click', async () => {
+    const preset = PRESETS.find(p => p.id === state.activePreset);
+    if (!preset) {
+      showNotification('No active preset to apply', 'error');
+      return;
+    }
+    try {
+      const r = await fetch('/api/layouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: preset.id,
+          name: preset.name,
+          cols: preset.cols,
+          rows: preset.rows,
+          elements: preset.elements,
+        }),
+      });
+      if (r.ok) {
+        showNotification('Layout applied to dashboard');
+      } else {
+        showNotification('Failed to apply layout', 'error');
+      }
+    } catch(err) {
+      showNotification('Network error — is ddash running?', 'error');
+    }
   });
 
   updateUndoRedoBtns();

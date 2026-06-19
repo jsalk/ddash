@@ -1,10 +1,13 @@
 """Network modules: Network, Connections, Interfaces."""
+import logging
 import time
 from datetime import datetime
 
 import psutil
 
 from backend.modules import registry
+
+log = logging.getLogger(__name__)
 
 
 @registry.register("network", "Network", "fa-network-wired", "network")
@@ -42,7 +45,7 @@ def collect_connections() -> dict:
                 "process": proc_name,
             })
         except Exception:
-            pass
+            log.debug("Skipping connection entry: %s", c)
     established = [c for c in conns if c["status"] == "ESTABLISHED"]
     others = [c for c in conns if c["status"] != "ESTABLISHED"]
     return {"connections": (established + others)[:30]}

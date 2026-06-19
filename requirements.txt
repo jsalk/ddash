@@ -1,0 +1,7 @@
+fastapi>=0.115.0
+uvicorn>=0.34.0
+psutil>=6.0.0
+requests>=2.32.0
+httpx>=0.28.0
+pytest>=8.0.0
+anyio>=4.0.0
